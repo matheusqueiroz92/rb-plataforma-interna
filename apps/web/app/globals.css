@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600;700;800&family=Cinzel:wght@400;500;600&display=swap');
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  min-height: 100vh;
+  background-color: theme('colors.cream');
+  color: theme('colors.gray.900');
+  font-family: theme('fontFamily.sans');
+  -webkit-font-smoothing: antialiased;
+}
+
+@layer components {
+  .cartao-institucional {
+    @apply bg-white rounded-card shadow-card relative overflow-hidden;
+  }
+
+  .cartao-institucional::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 3px;
+    background: linear-gradient(90deg, theme('colors.gold.400'), theme('colors.gold.500'));
+  }
+
+  .secao-titulo {
+    @apply font-serif text-2xl text-navy-900 pl-3 border-l-4 border-gold-500 leading-tight;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-badge px-3 py-1 text-xs uppercase tracking-wider font-semibold;
+  }
+
+  .badge-pendente { @apply bg-gray-100 text-gray-900; }
+  .badge-ok { @apply bg-institucional-green/15 text-institucional-green; }
+  .badge-alerta { @apply bg-institucional-amber/15 text-institucional-amber; }
+  .badge-critico { @apply bg-institucional-red/15 text-institucional-red; }
+  .badge-info { @apply bg-institucional-blue/15 text-institucional-blue; }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-5 py-2.5 font-semibold uppercase tracking-wide text-sm transition-all duration-200 ease-institucional disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-primario { @apply btn bg-navy-900 text-white hover:bg-navy-800 active:bg-navy-700; }
+  .btn-dourado { @apply btn bg-gold-500 text-navy-900 hover:bg-gold-400; }
+  .btn-sucesso { @apply btn bg-institucional-green text-white hover:opacity-90; }
+  .btn-critico { @apply btn bg-institucional-red text-white hover:opacity-90; }
+  .btn-outline { @apply btn bg-transparent border border-navy-900 text-navy-900 hover:bg-navy-900 hover:text-white; }
+
+  .input-institucional {
+    @apply w-full rounded-md border border-gray-100 bg-white px-4 py-2.5 text-sm text-gray-900 shadow-sm transition-colors focus:border-gold-500 focus:outline-none focus:ring-2 focus:ring-gold-500/20;
+  }
+  .textarea-institucional { @apply input-institucional resize-y min-h-[120px]; }
+  .select-institucional { @apply input-institucional appearance-none bg-[url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%230D1A2B' d='M6 8L2 4h8z'/%3E%3C/svg%3E")] bg-no-repeat bg-[right_1rem_center] pr-10; }
+  .label-institucional {
+    @apply block text-sm font-semibold uppercase tracking-wide text-navy-900 mb-1.5;
+  }
+}
+
+::selection {
+  background-color: theme('colors.gold.300');
+  color: theme('colors.navy.900');
+}

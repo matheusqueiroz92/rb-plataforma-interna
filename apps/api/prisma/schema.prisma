@@ -1,0 +1,457 @@
+// Plataforma Interna Reboucas e Bulhoes Advogados Associados
+// Schema Prisma 1.0 - abril/2026
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum Perfil {
+  SOCIO
+  GESTORA
+  ASSESSORA_JR
+  ESTAGIARIO
+}
+
+enum StatusUsuario {
+  ATIVO
+  INATIVO
+  FERIAS
+  AFASTADO
+}
+
+enum TipoPonto {
+  ENTRADA
+  SAIDA_ALMOCO
+  RETORNO_ALMOCO
+  SAIDA_FINAL
+}
+
+enum RegimePonto {
+  PRESENCIAL
+  HOME_OFFICE
+}
+
+enum PrioridadeDemanda {
+  BAIXA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+enum StatusDemanda {
+  PENDENTE
+  ANDAMENTO
+  ENTREGUE
+  EM_CORRECAO
+  CONCLUIDA
+  VENCIDA
+}
+
+enum TipoDemanda {
+  JURIDICA
+  ADMINISTRATIVA
+  PESQUISA
+  ATENDIMENTO
+  OUTRO
+}
+
+enum CategoriaChecklist {
+  S1_SEIRI
+  S2_SEITON
+  S3_SEISO
+  S4_SEIKETSU
+  S5_SHITSUKE
+  ROTINA_INICIO
+  ROTINA_JURIDICA
+  ROTINA_ADMIN
+  ENCERRAMENTO
+}
+
+enum PerfilChecklist {
+  TODOS
+  ESTAGIARIO
+  ASSESSORA_JR
+}
+
+enum TipoAtestado {
+  MEDICO
+  FACULDADE
+  OUTRO
+}
+
+enum TipoCertificado {
+  SEMANAL
+  MENSAL
+  ANUAL
+  DESTAQUE
+}
+
+enum TipoNotificacao {
+  LEMBRETE_PONTO
+  ALERTA_PRAZO
+  DEMANDA_ATRIBUIDA
+  DEMANDA_CORRIGIDA
+  AUSENCIA_PONTO
+  CERTIFICADO
+  RELATORIO_RECEBIDO
+  AUSENCIA_RELATORIO
+  OUTRO
+}
+
+enum StatusNotificacao {
+  PENDENTE
+  ENVIADA
+  FALHA
+}
+
+enum PapelChat {
+  USER
+  ASSISTANT
+}
+
+// ============================================================================
+// USUARIOS
+// ============================================================================
+
+model Usuario {
+  id                   String          @id @default(uuid()) @db.Uuid
+  nome                 String          @db.VarChar(120)
+  email                String          @unique @db.VarChar(120)
+  matricula            String          @unique @db.VarChar(20)
+  senhaHash            String          @map("senha_hash") @db.VarChar(255)
+  perfil               Perfil
+  status               StatusUsuario   @default(ATIVO)
+  instituicaoEnsino    String?         @map("instituicao_ensino") @db.VarChar(200)
+  periodoCurso         String?         @map("periodo_curso") @db.VarChar(20)
+  dataAdmissao         DateTime?       @map("data_admissao") @db.Date
+  dataDesligamento     DateTime?       @map("data_desligamento") @db.Date
+  fotoUrl              String?         @map("foto_url") @db.VarChar(500)
+  telefoneWhatsapp     String?         @map("telefone_whatsapp") @db.VarChar(20)
+  aceitePopEm          DateTime?       @map("aceite_pop_em") @db.Timestamptz()
+  aceitePopVersao      String?         @map("aceite_pop_versao") @db.VarChar(10)
+  aceitePopIp          String?         @map("aceite_pop_ip") @db.VarChar(64)
+  senhasAnteriores     Json?           @map("senhas_anteriores")
+  senhaAtualizadaEm    DateTime        @default(now()) @map("senha_atualizada_em") @db.Timestamptz()
+  criadoEm             DateTime        @default(now()) @map("criado_em") @db.Timestamptz()
+  atualizadoEm         DateTime        @updatedAt @map("atualizado_em") @db.Timestamptz()
+
+  pontos                 Ponto[]
+  pontosEditados         Ponto[]                @relation("PontoEditor")
+  demandasCriadas        Demanda[]              @relation("DemandaCriador")
+  demandasAtribuidas     Demanda[]              @relation("DemandaAtribuido")
+  demandasDelegadas      Demanda[]              @relation("DemandaDelegador")
+  demandasCorrigidas     Demanda[]              @relation("DemandaCorretor")
+  checklistRespostas     ChecklistResposta[]
+  checklistItensCriados  ChecklistItem[]        @relation("ChecklistItemCriador")
+  relatoriosDiarios      RelatorioDiario[]
+  relatoriosLidos        RelatorioDiario[]      @relation("RelatorioLeitor")
+  pontuacoesSemanais     PontuacaoSemanal[]
+  certificados           Certificado[]
+  certificadosEmitidos   Certificado[]          @relation("CertificadoEmissor")
+  auditoriaLogs          AuditoriaLog[]
+  notificacoesWhatsapp   NotificacaoWhatsapp[]
+  chatMensagens          ChatIAMensagem[]
+  conclusoesCursos       ConclusaoCurso[]
+
+  @@index([perfil, status])
+  @@index([email])
+  @@map("usuarios")
+}
+
+// ============================================================================
+// PONTO DIGITAL
+// ============================================================================
+
+model Ponto {
+  id                 String      @id @default(uuid()) @db.Uuid
+  usuarioId          String      @map("usuario_id") @db.Uuid
+  data               DateTime    @db.Date
+  tipo               TipoPonto
+  regime             RegimePonto
+  timestampServidor  DateTime    @default(now()) @map("timestamp_servidor") @db.Timestamptz()
+  timestampCliente   DateTime?   @map("timestamp_cliente") @db.Timestamptz()
+  ipRegistro         String      @map("ip_registro") @db.VarChar(64)
+  userAgent          String      @map("user_agent")
+  dispositivo        String?     @db.VarChar(50)
+  fotoBase64         String?     @map("foto_base64")
+  observacao         String?
+  editado            Boolean     @default(false)
+  editadoPorId       String?     @map("editado_por") @db.Uuid
+  editadoEm          DateTime?   @map("editado_em") @db.Timestamptz()
+  justificativaEdicao String?    @map("justificativa_edicao")
+
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  editor   Usuario? @relation("PontoEditor", fields: [editadoPorId], references: [id])
+
+  @@unique([usuarioId, data, tipo])
+  @@index([data])
+  @@index([usuarioId, data])
+  @@map("pontos")
+}
+
+// ============================================================================
+// DEMANDAS
+// ============================================================================
+
+model Demanda {
+  id                   String             @id @default(uuid()) @db.Uuid
+  titulo               String             @db.VarChar(200)
+  descricao            String
+  criadaPorId          String             @map("criada_por") @db.Uuid
+  atribuidaAId         String             @map("atribuida_a") @db.Uuid
+  delegadaPorId        String?            @map("delegada_por") @db.Uuid
+  corrigidaPorId       String?            @map("corrigida_por") @db.Uuid
+  prioridade           PrioridadeDemanda  @default(MEDIA)
+  status               StatusDemanda      @default(PENDENTE)
+  tipo                 TipoDemanda
+  processoCnj          String?            @map("processo_cnj") @db.VarChar(25)
+  clienteVinculado     String?            @map("cliente_vinculado") @db.VarChar(150)
+  prazoFatal           DateTime?          @map("prazo_fatal") @db.Timestamptz()
+  tempoEstimadoMinutos Int?               @map("tempo_estimado_minutos")
+  tempoRealMinutos     Int?               @map("tempo_real_minutos")
+  dataAtribuicao       DateTime           @default(now()) @map("data_atribuicao") @db.Timestamptz()
+  dataEntrega          DateTime?          @map("data_entrega") @db.Timestamptz()
+  dataCorrecao         DateTime?          @map("data_correcao") @db.Timestamptz()
+  notaCorrecao         Int?               @map("nota_correcao")
+  feedbackCorretor     String?            @map("feedback_corretor")
+  arquivosAnexos       Json?              @map("arquivos_anexos")
+  semanaReferencia     String?            @map("semana_referencia") @db.VarChar(10)
+  criadoEm             DateTime           @default(now()) @map("criado_em") @db.Timestamptz()
+  atualizadoEm         DateTime           @updatedAt @map("atualizado_em") @db.Timestamptz()
+
+  criador     Usuario  @relation("DemandaCriador", fields: [criadaPorId], references: [id])
+  atribuido   Usuario  @relation("DemandaAtribuido", fields: [atribuidaAId], references: [id])
+  delegador   Usuario? @relation("DemandaDelegador", fields: [delegadaPorId], references: [id])
+  corretor    Usuario? @relation("DemandaCorretor", fields: [corrigidaPorId], references: [id])
+
+  @@index([atribuidaAId, status])
+  @@index([semanaReferencia])
+  @@index([prazoFatal])
+  @@map("demandas")
+}
+
+// ============================================================================
+// CHECKLIST 5S
+// ============================================================================
+
+model ChecklistItem {
+  id               String             @id @default(uuid()) @db.Uuid
+  categoria        CategoriaChecklist
+  perfilAlvo       PerfilChecklist    @default(TODOS) @map("perfil_alvo")
+  texto            String
+  obrigatorio      Boolean            @default(true)
+  aplicaRemoto     Boolean            @default(true) @map("aplica_remoto")
+  aplicaPresencial Boolean            @default(true) @map("aplica_presencial")
+  ordem            Int                @default(0)
+  ativo            Boolean            @default(true)
+  criadoPorId      String?            @map("criado_por") @db.Uuid
+  atualizadoEm     DateTime           @updatedAt @map("atualizado_em") @db.Timestamptz()
+
+  criador   Usuario?             @relation("ChecklistItemCriador", fields: [criadoPorId], references: [id])
+  respostas ChecklistResposta[]
+
+  @@index([categoria, ordem])
+  @@index([ativo])
+  @@map("checklist_itens")
+}
+
+model ChecklistResposta {
+  id               String    @id @default(uuid()) @db.Uuid
+  usuarioId        String    @map("usuario_id") @db.Uuid
+  itemId           String    @map("item_id") @db.Uuid
+  data             DateTime  @db.Date
+  concluido        Boolean   @default(false)
+  concluidoEm      DateTime? @map("concluido_em") @db.Timestamptz()
+  melhoriaSugerida String?   @map("melhoria_sugerida")
+
+  usuario Usuario       @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  item    ChecklistItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, itemId, data])
+  @@index([data])
+  @@map("checklist_respostas")
+}
+
+// ============================================================================
+// RELATORIOS DIARIOS
+// ============================================================================
+
+model RelatorioDiario {
+  id                         String         @id @default(uuid()) @db.Uuid
+  usuarioId                  String         @map("usuario_id") @db.Uuid
+  data                       DateTime       @db.Date
+  pergunta1Atividades        String         @map("pergunta_1_atividades")
+  pergunta2Dificuldades      String         @map("pergunta_2_dificuldades")
+  pergunta3DemandaConcluida  Boolean        @map("pergunta_3_demanda_concluida")
+  pergunta3Justificativa     String?        @map("pergunta_3_justificativa")
+  atestadoAnexoUrl           String?        @map("atestado_anexo_url") @db.VarChar(500)
+  atestadoTipo               TipoAtestado?  @map("atestado_tipo")
+  enviadoEm                  DateTime       @default(now()) @map("enviado_em") @db.Timestamptz()
+  lidoPorId                  String?        @map("lido_por") @db.Uuid
+  lidoEm                     DateTime?      @map("lido_em") @db.Timestamptz()
+
+  usuario Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  leitor  Usuario? @relation("RelatorioLeitor", fields: [lidoPorId], references: [id])
+
+  @@unique([usuarioId, data])
+  @@index([data])
+  @@map("relatorios_diarios")
+}
+
+// ============================================================================
+// PONTUACAO E RANKING
+// ============================================================================
+
+model PontuacaoSemanal {
+  id                       String   @id @default(uuid()) @db.Uuid
+  usuarioId                String   @map("usuario_id") @db.Uuid
+  semanaReferencia         String   @map("semana_referencia") @db.VarChar(10)
+  pontualidadePontos       Int      @default(0) @map("pontualidade_pontos")
+  qualidadeDemandaMedia    Decimal  @default(0) @map("qualidade_demanda_media") @db.Decimal(4, 2)
+  demandasExtrasPontos     Int      @default(0) @map("demandas_extras_pontos")
+  checklist5sPontos        Int      @default(0) @map("checklist_5s_pontos")
+  relatoriosEntreguePontos Int      @default(0) @map("relatorios_entregues_pontos")
+  totalPontos              Int      @default(0) @map("total_pontos")
+  posicaoRanking           Int?     @map("posicao_ranking")
+  calculadoEm              DateTime @default(now()) @map("calculado_em") @db.Timestamptz()
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, semanaReferencia])
+  @@index([semanaReferencia, posicaoRanking])
+  @@map("pontuacoes_semanais")
+}
+
+// ============================================================================
+// CERTIFICADOS
+// ============================================================================
+
+model Certificado {
+  id                 String          @id @default(uuid()) @db.Uuid
+  usuarioId          String          @map("usuario_id") @db.Uuid
+  tipo               TipoCertificado
+  periodoReferencia  String          @map("periodo_referencia") @db.VarChar(20)
+  pontuacaoObtida    Int?            @map("pontuacao_obtida")
+  posicaoFinal       Int?            @map("posicao_final")
+  emitidoPorId       String?         @map("emitido_por") @db.Uuid
+  emitidoEm          DateTime        @default(now()) @map("emitido_em") @db.Timestamptz()
+  pdfUrl             String?         @map("pdf_url") @db.VarChar(500)
+  numeroSequencial   String          @unique @map("numero_sequencial") @db.VarChar(20)
+
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  emissor  Usuario? @relation("CertificadoEmissor", fields: [emitidoPorId], references: [id])
+
+  @@index([tipo, periodoReferencia])
+  @@map("certificados")
+}
+
+// ============================================================================
+// AUDITORIA
+// ============================================================================
+
+model AuditoriaLog {
+  id               BigInt   @id @default(autoincrement())
+  usuarioId        String?  @map("usuario_id") @db.Uuid
+  acao             String   @db.VarChar(50)
+  entidade         String   @db.VarChar(50)
+  entidadeId       String?  @map("entidade_id") @db.Uuid
+  dadosAnteriores  Json?    @map("dados_anteriores")
+  dadosNovos       Json?    @map("dados_novos")
+  ip               String?  @db.VarChar(64)
+  userAgent        String?  @map("user_agent")
+  timestamp        DateTime @default(now()) @db.Timestamptz()
+
+  usuario Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  @@index([usuarioId, timestamp])
+  @@index([entidade, entidadeId])
+  @@index([timestamp])
+  @@map("auditoria_log")
+}
+
+// ============================================================================
+// NOTIFICACOES WHATSAPP
+// ============================================================================
+
+model NotificacaoWhatsapp {
+  id              String            @id @default(uuid()) @db.Uuid
+  usuarioId       String?           @map("usuario_id") @db.Uuid
+  telefoneDestino String            @map("telefone_destino") @db.VarChar(20)
+  tipo            TipoNotificacao
+  mensagem        String
+  status          StatusNotificacao @default(PENDENTE)
+  zapiResponse    Json?             @map("zapi_response")
+  agendadaPara    DateTime?         @map("agendada_para") @db.Timestamptz()
+  enviadaEm       DateTime?         @map("enviada_em") @db.Timestamptz()
+  tentativas      Int               @default(0)
+  criadaEm        DateTime          @default(now()) @map("criada_em") @db.Timestamptz()
+
+  usuario Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+
+  @@index([status, agendadaPara])
+  @@index([tipo])
+  @@map("notificacoes_whatsapp")
+}
+
+// ============================================================================
+// CHAT IA CLAUDE
+// ============================================================================
+
+model ChatIAMensagem {
+  id                String    @id @default(uuid()) @db.Uuid
+  usuarioId         String    @map("usuario_id") @db.Uuid
+  conversaId        String    @map("conversa_id") @db.Uuid
+  papel             PapelChat
+  conteudo          String
+  tokensConsumidos  Int?      @map("tokens_consumidos")
+  modeloClaude      String?   @map("modelo_claude") @db.VarChar(50)
+  timestamp         DateTime  @default(now()) @db.Timestamptz()
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, conversaId, timestamp])
+  @@index([conversaId])
+  @@map("chat_ia_mensagens")
+}
+
+// ============================================================================
+// CURSOS E TRILHAS
+// ============================================================================
+
+model CursoTrilha {
+  id                         String  @id @default(uuid()) @db.Uuid
+  titulo                     String  @db.VarChar(200)
+  descricao                  String?
+  obrigatorio                Boolean @default(false)
+  perfilAlvo                 String  @map("perfil_alvo") @db.VarChar(50)
+  conclusaoObrigatoriaDias   Int?    @map("conclusao_obrigatoria_dias")
+  urlExterna                 String? @map("url_externa") @db.VarChar(500)
+  ativo                      Boolean @default(true)
+
+  conclusoes ConclusaoCurso[]
+
+  @@map("cursos_trilhas")
+}
+
+model ConclusaoCurso {
+  id              String    @id @default(uuid()) @db.Uuid
+  usuarioId       String    @map("usuario_id") @db.Uuid
+  cursoId         String    @map("curso_id") @db.Uuid
+  concluidoEm     DateTime? @map("concluido_em") @db.Timestamptz()
+  certificadoUrl  String?   @map("certificado_url") @db.VarChar(500)
+
+  usuario Usuario     @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  curso   CursoTrilha @relation(fields: [cursoId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, cursoId])
+  @@map("conclusoes_cursos")
+}

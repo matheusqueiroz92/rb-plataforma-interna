@@ -1,0 +1,132 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: rb-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      TZ: America/Bahia
+    volumes:
+      - rb_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - rb_net
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: rb-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TZ: America/Bahia
+      NODE_ENV: ${NODE_ENV}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - rb_uploads:/app/uploads
+      - ./docs:/app/docs:ro
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rb-api.rule=Host(`${APP_DOMAIN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.rb-api.entrypoints=websecure"
+      - "traefik.http.routers.rb-api.tls=true"
+      - "traefik.http.routers.rb-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.rb-api.loadbalancer.server.port=4000"
+    networks:
+      - rb_net
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: rb-web
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      TZ: America/Bahia
+      NODE_ENV: ${NODE_ENV}
+    depends_on:
+      - api
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rb-web.rule=Host(`${APP_DOMAIN}`)"
+      - "traefik.http.routers.rb-web.entrypoints=websecure"
+      - "traefik.http.routers.rb-web.tls=true"
+      - "traefik.http.routers.rb-web.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.rb-web.priority=1"
+      - "traefik.http.services.rb-web.loadbalancer.server.port=3000"
+    networks:
+      - rb_net
+
+  backup:
+    build:
+      context: ./scripts/backup
+    container_name: rb-backup
+    restart: unless-stopped
+    environment:
+      TZ: America/Bahia
+      PG_HOST: db
+      PG_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      RCLONE_REMOTE: ${RCLONE_REMOTE}
+      BACKUP_PREFIXO: ${BACKUP_PREFIXO:-rb-plataforma}
+      GPG_PUBLIC_KEY_ID: ${GPG_PUBLIC_KEY_ID:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - rb_backup_atual:/backup/atual
+      - ./scripts/backup/rclone.conf:/config/rclone.conf:ro
+    networks:
+      - rb_net
+
+  traefik:
+    image: traefik:v3.2
+    container_name: rb-traefik
+    restart: unless-stopped
+    command:
+      - --api.dashboard=false
+      - --providers.docker=true
+      - --providers.docker.exposedByDefault=false
+      - --providers.docker.network=rb_net
+      - --providers.file.filename=/etc/traefik/dynamic.yml
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      - --certificatesresolvers.letsencrypt.acme.email=${TRAEFIK_ACME_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge=true
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      - --log.level=INFO
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/acme.json:/letsencrypt/acme.json
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    networks:
+      - rb_net
+
+volumes:
+  rb_db_data:
+  rb_uploads:
+  rb_backup_atual:
+
+networks:
+  rb_net:
+    driver: bridge

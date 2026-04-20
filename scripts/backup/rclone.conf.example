@@ -1,0 +1,13 @@
+# Copie este arquivo para rclone.conf no mesmo diretorio e preencha os valores.
+# Gere client_id/client_secret em https://rclone.org/drive/#making-your-own-client-id
+# Depois rode: rclone config reconnect gdrive: para obter um token OAuth.
+# No VPS Hostinger basta: rclone config  e seguir o assistente.
+
+[gdrive]
+type = drive
+client_id = SUBSTITUIR_CLIENT_ID
+client_secret = SUBSTITUIR_CLIENT_SECRET
+scope = drive.file
+token = {"access_token":"SUBSTITUIR","token_type":"Bearer","refresh_token":"SUBSTITUIR","expiry":"2099-01-01T00:00:00Z"}
+team_drive =
+root_folder_id = SUBSTITUIR_ID_DA_PASTA_DESTINO

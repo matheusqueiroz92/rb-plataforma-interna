@@ -1,0 +1,4 @@
+SHELL=/bin/bash
+TZ=America/Bahia
+# Backup diario as 02:00 horario de Bahia
+0 2 * * * /usr/local/bin/rb-backup >> /var/log/rb-backup.log 2>&1
