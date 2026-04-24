@@ -1,283 +1,510 @@
 # Plataforma Interna | Rebouças & Bulhões Advogados Associados
 
-Sistema web interno completo: gestao de equipe, ponto digital, relatorio diario, checklist 5S, demandas com delegacao em cascata, correcao, ranking semanal, notificacoes WhatsApp via Z-API, chat com Claude, certificados em PDF, cron jobs automatizados, cursos, espelho mensal de ponto e trilha de auditoria.
+Sistema web interno para gestão de equipe: ponto digital antifraude, relatório diário, checklist 5S, demandas com delegação em cascata e correção, ranking semanal de produtividade, notificações WhatsApp (Z-API), chat com Claude (Anthropic), certificados e espelho de ponto em PDF, cursos, auditoria, cron jobs e app mobile (Expo).
 
-**Versao:** 1.3 (Fases 1 a 5 entregues | Turborepo + Fastify + Next.js 16 + Expo 52 + backup automatizado)
-**Uso:** exclusivamente interno
-**Fuso:** America/Bahia
+**Uso:** exclusivamente interno.  
+**Fuso horário padrão:** `America/Bahia` (incluindo agendamentos de jobs na API).  
+**Versão documentada:** alinhada ao monorepo (Turborepo + Fastify 5 + Next.js 16 + Prisma 5 + Expo 52).
 
-## Arquitetura
+## Guia para usuarios finais (nao tecnico)
 
-Monorepo Turborepo com Clean Architecture / DDD no backend.
+Para um material em linguagem simples, focado no uso do dia a dia da plataforma por pessoas leigas em tecnologia, acesse:
+
+- [Guia do Usuario da Plataforma](docs/GUIA-USUARIO-PLATAFORMA.md)
+
+---
+
+## Sumário
+
+1. [Arquitetura do repositório](#arquitetura-do-repositório)  
+2. [Stack e tecnologias](#stack-e-tecnologias)  
+3. [Modelo de dados (Prisma)](#modelo-de-dados-prisma)  
+4. [Perfis, hierarquia e autorização](#perfis-hierarquia-e-autorização)  
+5. [API REST – rotas completas](#api-rest--rotas-completas)  
+6. [Frontend web (Next.js) – páginas e comportamento](#frontend-web-nextjs--páginas-e-comportamento)  
+7. [App mobile (Expo)](#app-mobile-expo)  
+8. [Fluxos de negócio principais](#fluxos-de-negócio-principais)  
+9. [Jobs agendados (cron)](#jobs-agendados-cron)  
+10. [Integrações externas](#integrações-externas)  
+11. [Pacotes compartilhados `@rb/*`](#pacotes-compartilhados-rb)  
+12. [Variáveis de ambiente](#variáveis-de-ambiente)  
+13. [Instalação e execução](#instalação-e-execução)  
+14. [Testes e qualidade](#testes-e-qualidade)  
+15. [Infraestrutura (Docker, Traefik, backup)](#infraestrutura-docker-traefik-backup)  
+16. [Conformidade e governança](#conformidade-e-governança)  
+17. [Convenções de desenvolvimento](#convenções-de-desenvolvimento)
+
+---
+
+## Arquitetura do repositório
+
+Monorepo **pnpm** + **Turborepo**, com **Clean Architecture** / **DDD leve** no backend (módulos por contexto: `*.routes` → `*.controller` → `*.service` → `*.repository`, regras em `*.domain.ts` com testes Vitest).
 
 ```
 rb-plataforma/
 ├── apps/
-│   ├── api/            Fastify 5 + Prisma 5 + TypeScript
+│   ├── api/                 Fastify 5 + Prisma 5 + TypeScript (ESM)
+│   │   ├── prisma/          schema, migrations, seed
 │   │   └── src/
-│   │       ├── config/         env validado com Zod
-│   │       ├── plugins/        auth, auditoria, zod type provider, error handler
-│   │       ├── shared/         errors, logger (Winston), hash (bcrypt), prisma, ip
-│   │       └── modules/        uma pasta por contexto
-│   │           └── <modulo>/
-│   │               ├── <modulo>.repository.ts   Interface + Prisma
-│   │               ├── <modulo>.service.ts      Use cases / business logic
-│   │               ├── <modulo>.controller.ts   HTTP layer (Fastify handlers)
-│   │               ├── <modulo>.routes.ts       Fastify plugin
-│   │               ├── <modulo>.domain.ts       Entidades/regras (onde aplicavel)
-│   │               └── <modulo>.test.ts         Vitest
-│   ├── web/            Next.js 16 App Router + Tailwind 3 + Zustand + TanStack Query
-│   └── mobile/         Expo 52 + expo-router v4 + React Native 0.76
+│   │       ├── config/       env (Zod)
+│   │       ├── jobs/         cron (node-cron), timezone America/Bahia
+│   │       ├── plugins/     auth JWT, auditoria, zod, error handler
+│   │       ├── integrations/ z-api, anthropic, PDF (Puppeteer)
+│   │       ├── shared/      prisma, logger (Winston), erros, hash
+│   │       └── modules/     auth, users, ponto, relatorios, checklist, demandas, ...
+│   ├── web/                 Next.js 16 (App Router) + React 19 + Tailwind 3
+│   └── mobile/              Expo 52 + expo-router v4 + React Native 0.76
 ├── packages/
-│   ├── constants/      Enums, hierarquia, constantes
-│   ├── types/          DTOs compartilhados
-│   ├── utils/          dayjs, formatters, validacao de senha
-│   ├── validators/     Schemas Zod compartilhados
-│   ├── ui/             Componentes UI reutilizaveis (fase futura)
-│   ├── eslint-config/  ESLint 9 (flat config)
-│   └── typescript-config/  tsconfig base/node/nextjs/library
-├── traefik/            Proxy reverso com ACME/Let's Encrypt
-├── scripts/
-│   └── backup/         Servico Docker de backup (pg_dump + rclone Google Drive)
-├── docs/               POP-EST-001 e documentacao funcional
-├── turbo.json          Pipeline de build/test/lint
+│   ├── constants/           Enums, hierarquia de perfis, limites de negócio
+│   ├── types/               DTOs compartilhados
+│   ├── utils/               dayjs, formatadores, regras auxiliares
+│   ├── validators/          Schemas Zod compartilhados com a API
+│   ├── eslint-config/       ESLint 9 (flat)
+│   └── typescript-config/   tsconfig base (node, next, library)
+├── traefik/                 Proxy reverso + TLS (Let’s Encrypt)
+├── scripts/backup/          Backup PostgreSQL (pg_dump, rclone, opcional GPG)
+├── docs/                    POP-EST-001 e documentação funcional
+├── turbo.json
 ├── pnpm-workspace.yaml
-└── docker-compose.yml  db + api + web + traefik
+└── docker-compose.yml
 ```
 
-### Principios aplicados
+**Princípios:** dependências apontam para dentro; repositórios com interface; API stateless com **JWT** (access) + **refresh token** (assinado com segredo separado); **bcrypt** (custo configurável, padrão 12); validação com **Zod** (`fastify-type-provider-zod`).
 
-- Clean Architecture: dependencias apontam para dentro (controllers -> services -> repositories, domain isolado).
-- DDD leve: entidades e regras de negocio (ex.: `RegrasDelegacao`, `proximoTipoEsperado`, `calcularPontuacaoSemana`) isoladas em arquivos `*.domain.ts` com testes unitarios.
-- DRY: schemas Zod, tipos, enums e utilitarios compartilhados via packages `@rb/*`.
-- SOLID: interfaces de repositorio (`IAuthRepository`, `IUsersRepository`, etc.) desacopladas da implementacao Prisma, permitindo mock em testes.
-- API stateless, JWT + refresh token, bcrypt custo 12.
-- Injecao de dependencias via construtor nos services e controllers.
+---
 
-## Stack
+## Stack e tecnologias
 
-### Runtime
+| Camada | Tecnologias |
+|--------|----------------|
+| **Runtime** | Node.js ≥ 24, pnpm 9.12, PostgreSQL 16 |
+| **Backend** | Fastify 5, Prisma 5, Zod, @fastify/jwt, @fastify/cors, @fastify/helmet, @fastify/rate-limit, @fastify/multipart, @fastify/static, bcrypt, jsonwebtoken (refresh), Winston + rotação diária, Vitest, node-cron, Puppeteer (PDF), @anthropic-ai/sdk |
+| **Frontend web** | Next.js 16, React 19, Tailwind CSS 3, Zustand 5 (sessão + persist), TanStack Query 5, React Hook Form + resolvers Zod, Recharts, Lucide React, `clsx` + `tailwind-merge` |
+| **Mobile** | Expo 52, expo-router v4, React Native 0.76; ver [apps/mobile/README.md](apps/mobile/README.md) |
+| **Infra** | Docker Compose, Traefik v3.2, volumes para uploads e backup |
 
-- Node.js 24 LTS
-- pnpm 9.12.0
-- PostgreSQL 16
-- Docker + Docker Compose
-- Traefik v3.2 (proxy reverso com TLS automatico via Let's Encrypt)
+**Arquivos estáticos / uploads:** a API expõe `GET /uploads/...` via `@fastify/static` a partir do diretório `uploads/` (ex.: anexos gerados no servidor).
 
-### Backend (apps/api)
+---
 
-- Fastify 5 (com `fastify-type-provider-zod`)
-- Prisma 5 (ORM)
-- Zod (validacao)
-- @fastify/jwt, @fastify/cors, @fastify/helmet, @fastify/rate-limit, @fastify/multipart, @fastify/static
-- Winston (logs com rotacao diaria)
-- Vitest (TDD, unitarios e de dominio)
+## Modelo de dados (Prisma)
 
-### Frontend (apps/web)
+### Tabelas (mapeamento `@@map`)
 
-- Next.js 16 com App Router
-- React 19
-- Tailwind CSS 3
-- Zustand 5 (estado)
-- TanStack Query 5 (requisicoes)
-- React Hook Form + @hookform/resolvers
-- Recharts (graficos)
-- Lucide React (icones)
+| Tabela Prisma / DB | Descrição resumida |
+|--------------------|-------------------|
+| `Usuario` → `usuarios` | Colaborador: email, matrícula, perfil, status, dados cadastrais, aceite POP, histórico de senhas (JSON), etc. |
+| `Ponto` → `pontos` | Registros de ponto por dia/tipo; foto, IP, UA; edição e justificativa (gestão). **Unique:** `(usuarioId, data, tipo)`. |
+| `Demanda` → `demandas` | Tarefa com prioridade, tipo, prazo, status, delegação, correção, nota, anexos (JSON), semana de referência. |
+| `ChecklistItem` → `checklist_itens` | Itens 5S / rotinas; categorias, perfil alvo, remoto/presencial. |
+| `ChecklistResposta` → `checklist_respostas` | Respostas diárias por item. **Unique:** `(usuarioId, itemId, data)`. |
+| `RelatorioDiario` → `relatorios_diarios` | Três perguntas + atestado opcional; leitura por assessora+. **Unique:** `(usuarioId, data)`. |
+| `PontuacaoSemanal` → `pontuacoes_semanais` | Breakdown e total da semana; posição no ranking. **Unique:** `(usuarioId, semanaReferencia)`. |
+| `Certificado` → `certificados` | PDF gerado, número sequencial único, tipo, período, emissor. |
+| `AuditoriaLog` → `auditoria_log` | Trilha: ação, entidade, JSON antes/depois, IP, UA. ID autoincremento `BigInt`. |
+| `NotificacaoWhatsapp` → `notificacoes_whatsapp` | Fila: destino, tipo, status, tentativas, resposta Z-API. |
+| `ChatIAMensagem` → `chat_ia_mensagens` | Mensagens por `conversaId` + usuário. |
+| `CursoTrilha` → `cursos_trilhas` | Curso com `urlExterna`, obrigatoriedade, prazo de conclusão. |
+| `ConclusaoCurso` → `conclusoes_cursos` | Conclusão por usuário. **Unique:** `(usuarioId, cursoId)`. |
 
-## Estado atual
+### Enums principais (domínio)
 
-### Fase 1 (entregue)
+- **Perfil:** `SOCIO`, `GESTORA`, `ASSESSORA_JR`, `ESTAGIARIO`  
+- **StatusUsuario:** `ATIVO`, `INATIVO`, `FERIAS`, `AFASTADO`  
+- **TipoPonto / sequência:** `ENTRADA` → `SAIDA_ALMOCO` → `RETORNO_ALMOCO` → `SAIDA_FINAL`  
+- **RegimePonto:** `PRESENCIAL`, `HOME_OFFICE`  
+- **Demanda:** status (`PENDENTE`, `ANDAMENTO`, `ENTREGUE`, `EM_CORRECAO`, `CONCLUIDA`, `VENCIDA`), prioridade, tipo  
+- **Checklist:** `CategoriaChecklist`, `PerfilChecklist`  
+- **Notificações / certificados / chat:** conforme `schema.prisma` (tipos alinhados a `@rb/constants` onde aplicável)
 
-- Autenticacao JWT com refresh, troca de senha com validacao de forca e historico das ultimas cinco senhas.
-- Cadastro, edicao, inativacao e reset de senha de usuarios (perfis SOCIO/GESTORA).
-- Ponto digital antifraude: sequencia travada, foto obrigatoria (MediaDevices), IP/User-Agent, timestamp do servidor, edicao restrita a gestora/socio com justificativa, bloqueio da saida final sem relatorio.
-- Relatorio diario obrigatorio com tres perguntas, justificativa condicional e upload de atestado (PDF/JPG/PNG).
-- Aceite do POP no primeiro acesso com registro de versao, data, IP e User-Agent.
-- Trilha de auditoria automatica para todas as acoes sensiveis.
-- Design system institucional navy/dourado.
+---
 
-### Fase 2 (entregue)
+## Perfis, hierarquia e autorização
 
-- Checklist 5S interativo diario com progresso percentual, agrupamento por categoria (Seiri, Seiton, Seiso, Seiketsu, Shitsuke, rotinas).
-- Demandas com CRUD completo, delegacao em cascata respeitando hierarquia (sócio > gestora > assessora jr > estagiario), atualizacao de status (PENDENTE -> ANDAMENTO -> ENTREGUE -> CONCLUIDA/EM_CORRECAO).
-- Correcao com notas 0/8/10 e feedback obrigatorio.
-- Calculo semanal de pontuacao (pontualidade 25 + qualidade 40 + extras 15 + checklist 10 + relatorios 10 = 100), ranking persistido.
-- Grafico de meu desempenho das ultimas oito semanas.
+Hierarquia numérica (maior = mais privilégio), usada em `exigirNivelMinimo` no `auth.plugin`:
 
-### Fase 3 (entregue)
+| Perfil | Nível |
+|--------|--------|
+| ESTAGIARIO | 1 |
+| ASSESSORA_JR | 2 |
+| GESTORA | 3 |
+| SOCIO | 4 |
 
-- **Integracao Z-API**: cliente HTTP, templates de mensagens editaveis (`apps/api/src/integrations/zapi/templates.ts`), fila persistida em banco com retry automatico ate tres tentativas, processamento continuo via cron a cada minuto.
-- **Chat com Claude (Anthropic)**: system prompt treinado como Auxiliar Juridico Interno (`system-prompt.ts`), conversas persistidas com ate 20 mensagens de historico, controle de tokens por usuario e rate limit dedicado.
-- **Certificados em PDF**: geracao via Puppeteer com template institucional (moldura dourada, monograma), numero sequencial anual, emissao automatica para os tres primeiros colocados no ranking semanal, download autenticado.
-- **Cron jobs agendados**:
-  - `lembrete-ponto` (seg-sex 08:30): alerta estagiarios sem entrada registrada
-  - `alerta-prazo` (seg-sex 07:00): notifica demandas D-3, D-2, D-1
-  - `ranking-semanal` (seg 07:00): calcula pontuacao + ranking + emite certificados do podium
-  - `lembrete-relatorio` (seg-sex 19:00): avisa gestora sobre relatorios faltantes
-  - `fila-whatsapp` (a cada minuto): processa notificacoes pendentes
+- `exigirNivelMinimo('ASSESSORA_JR')`: permite **ASSESSORA_JR, GESTORA e SOCIO**.  
+- `exigirNivelMinimo('GESTORA')`: permite **GESTORA e SOCIO**.  
+- Toda requisição autenticada recarrega o usuário no banco e exige `status === ATIVO`.
 
-### Fase 4 (entregue)
+**Delegação de demandas:** só para perfil de nível **estritamente maior** que o destino (regra `podeDelegarPara` em `@rb/constants`).
 
-- **Trilha de auditoria consultavel**: pagina com filtros por entidade, usuario, intervalo de datas, paginacao de 50 em 50, visualizacao de IP e User-Agent (restrita a gestora e socio).
-- **Espelho mensal de ponto em PDF**: geracao via Puppeteer com tabela completa dos registros, calculo de horas trabalhadas por dia, destaque visual para registros editados, total mensal.
-- **Cursos e trilhas**: modulo completo com CRUD (gestora), marcacao de conclusao pelo colaborador, integracao com plataforma educacional via `urlExterna`, pagina de progresso individual.
-- **Relatorios gerenciais**: endpoint `/api/relatorios-gerenciais/resumo-equipe` para indicadores por colaborador no intervalo escolhido.
+---
 
-### Fase 5 (entregue)
+## API REST – rotas completas
 
-- **App mobile Expo 52**: projeto completo em `apps/mobile/` com expo-router v4, React Native 0.76 e React 18. Reusa os pacotes `@rb/*` do monorepo. Telas: Login, Aceite do POP, Inicio, Ponto com camera frontal, Relatorio, Checklist, Demandas. Documentacao detalhada em [apps/mobile/README.md](apps/mobile/README.md).
-- **Backup automatizado**: servico Docker `rb-backup` com `pg_dump` + gzip + GPG (opcional) + `rclone` para Google Drive. Cron diario 02:00 Bahia, retencao 30 diarios / 12 mensais / 5 anuais. Script `rb-restaurar` para restauracao assistida. Documentacao em [scripts/backup/README.md](scripts/backup/README.md).
+Prefixo global das rotas de módulo conforme [apps/api/src/app.ts](apps/api/src/app.ts). A menos que indicado, o cliente deve enviar `Authorization: Bearer <accessToken>`.
 
-## Instalacao e execucao
+### Saúde e sessão (sem autenticação)
 
-### Requisitos no VPS Hostinger
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/health` | Status do serviço |
+| POST | `/api/auth/login` | Login; **rate limit** dedicado (env: `RATE_LIMIT_*_LOGIN`) |
+| POST | `/api/auth/refresh` | Novo access token a partir do refresh token |
 
-- Linux (Ubuntu LTS recomendado)
-- Docker 24+ com Compose v2
-- Dominio apontando para o VPS (registro A)
-- Porta 80 e 443 liberadas
+### Autenticação (token obrigatório)
 
-### Primeiro deploy
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/eu` | Dados básicos do token + usuário (rota solta no `app.ts`) |
+| POST | `/api/auth/logout` | Registra **LOGOUT** na auditoria e responde `{ sucesso: true }`; a invalidação do token é feita no **cliente** (remover storage) — API stateless |
+| POST | `/api/auth/trocar-senha` | Troca com validação de força e histórico |
+| POST | `/api/auth/aceitar-pop` | Registra aceite do POP |
 
-```bash
-git clone <repo> /opt/rb-plataforma
-cd /opt/rb-plataforma
-cp .env.example .env
-# Editar .env: substituir TODOS os campos marcados com SUBSTITUIR e placeholder
+### Usuários — prefixo `/api/users` (mínimo **GESTORA**)
 
-# Preparar Traefik
-touch traefik/acme.json && chmod 600 traefik/acme.json
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/users` | Listar |
+| POST | `/api/users` | Criar (body validado) |
+| GET | `/api/users/:id` | Obter |
+| PUT | `/api/users/:id` | Atualizar |
+| DELETE | `/api/users/:id` | Remover/inativar (conforme regra de negócio) |
+| POST | `/api/users/:id/resetar-senha` | Reset de senha |
 
-# Subir servicos
-docker compose up -d --build
+### Ponto — `/api/ponto`
 
-# Migracoes e seed
-docker compose exec api pnpm prisma migrate deploy
-docker compose exec api pnpm seed
-```
+| Método | Rota | Auth / nível | Descrição |
+|--------|------|----------------|-----------|
+| POST | `/api/ponto/registrar` | Autenticado | Registro com sequência, foto, antifraude |
+| GET | `/api/ponto/hoje` | Autenticado | Batidas do dia |
+| GET | `/api/ponto/historico` | Autenticado | Query validada (`filtroHistoricoSchema`) |
+| PUT | `/api/ponto/:id/editar` | **GESTORA+** | Edição com justificativa |
 
-O seed cria:
-- Socio titular (Dr. Ricardo Bulhoes).
-- Gestora juridica (Larissa).
-- Itens do checklist 5S.
-- Cursos obrigatorios (LGPD, Codigo de Etica, POP-EST-001).
+### Relatórios diários — `/api/relatorios`
 
-Senhas iniciais definidas em `SEED_SOCIO_SENHA` e `SEED_GESTORA_SENHA` no `.env`. **Trocar imediatamente no primeiro acesso.**
+| Método | Rota | Nível mínimo | Descrição |
+|--------|------|--------------|-----------|
+| POST | `/api/relatorios/enviar` | Autenticado | Envio do relatório |
+| GET | `/api/relatorios/meus` | Autenticado | Listagem do usuário |
+| GET | `/api/relatorios/hoje` | Autenticado | Relatório do dia |
+| GET | `/api/relatorios/equipe` | **ASSESSORA_JR+** | Visão equipe |
+| POST | `/api/relatorios/:id/marcar-lido` | **ASSESSORA_JR+** | Marca como lido |
+| POST | `/api/relatorios/atestado/upload` | Autenticado | Upload multipart (limites `UPLOAD_MAX_BYTES`) |
 
-### Desenvolvimento local
+### Checklist — `/api/checklist`
+
+| Método | Rota | Nível | Descrição |
+|--------|------|--------|-----------|
+| GET | `/api/checklist/itens` | Autenticado | Itens aplicáveis |
+| POST | `/api/checklist/itens` | **GESTORA+** | Criar item |
+| PUT | `/api/checklist/itens/:id` | **GESTORA+** | Atualizar item |
+| DELETE | `/api/checklist/itens/:id` | **GESTORA+** | Inativar item |
+| POST | `/api/checklist/responder` | Autenticado | Resposta diária |
+| GET | `/api/checklist/progresso-hoje` | Autenticado | Progresso |
+| GET | `/api/checklist/equipe-hoje` | **ASSESSORA_JR+** | Visão equipe no dia |
+
+### Demandas — `/api/demandas`
+
+| Método | Rota | Nível / observação | Descrição |
+|--------|------|--------------------|-----------|
+| POST | `/api/demandas` | **ASSESSORA_JR+** | Criar |
+| GET | `/api/demandas/minhas` | Autenticado + query | Minhas demandas |
+| GET | `/api/demandas/equipe` | **ASSESSORA_JR+** | Filtros de equipe |
+| GET | `/api/demandas/semana/:semana` | **ASSESSORA_JR+** | Por semana (rota estática antes de `:id`) |
+| GET | `/api/demandas/:id` | Autenticado | Detalhe |
+| PUT | `/api/demandas/:id/status` | Autenticado | Atualizar status (máquina de estados) |
+| POST | `/api/demandas/:id/delegar` | **ASSESSORA_JR+** | Delegar (hierarquia) |
+| POST | `/api/demandas/:id/corrigir` | **ASSESSORA_JR+** | Correção (notas 0/8/10, feedback) |
+
+### Produtividade — `/api/produtividade`
+
+| Método | Rota | Nível | Descrição |
+|--------|------|--------|-----------|
+| GET | `/api/produtividade/ranking-semanal` | Autenticado | Query `?semana=` opcional; padrão = semana atual |
+| GET | `/api/produtividade/meu-desempenho` | Autenticado | Query `?semanas=` (padrão 12) |
+| POST | `/api/produtividade/calcular` | **GESTORA+** | Body opcional `{ semana }`; recalcula e retorna ranking |
+
+### POP — `/api/pop`
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/api/pop/versao-atual` | Versão atual (env `POP_EST_VERSAO_ATUAL`) |
+| GET | `/api/pop/texto` | Conteúdo markdown do POP-EST-001 (busca em `docs/`) |
+
+### IA (Claude) — `/api/ia`  
+Rate limit dedicado: `RATE_LIMIT_IA_MAX` / `RATE_LIMIT_IA_WINDOW_MIN`.
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| POST | `/api/ia/chat` | Enviar mensagem (stream/conversa conforme serviço) |
+| GET | `/api/ia/conversas` | Listar conversas |
+| GET | `/api/ia/conversas/:id` | Histórico |
+| DELETE | `/api/ia/conversas/:id` | Excluir conversa |
+| GET | `/api/ia/consumo` | Uso de tokens / limites do usuário |
+
+### Certificados — `/api/certificados`  
+Ordem das rotas: `meus` e `download` antes de parâmetros genéricos.
+
+| Método | Rota | Nível | Descrição |
+|--------|------|--------|-----------|
+| GET | `/api/certificados/meus` | Autenticado | Meus certificados |
+| GET | `/api/certificados/:id/download` | Autenticado | Download autenticado do PDF |
+| GET | `/api/certificados/usuario/:usuarioId` | **GESTORA+** | Certificados de outro usuário |
+| POST | `/api/certificados/emitir` | **GESTORA+** | Emissão manual |
+| POST | `/api/certificados/emitir-semanais` | **GESTORA+** | Emissão em lote (pódium semanal, etc.) |
+
+### Cursos — `/api/cursos`
+
+| Método | Rota | Nível | Descrição |
+|--------|------|--------|-----------|
+| GET | `/api/cursos` | Autenticado | Listar cursos ativos / aplicáveis |
+| GET | `/api/cursos/meu-progresso` | Autenticado | Progresso individual |
+| POST | `/api/cursos` | **GESTORA+** | Criar curso |
+| PUT | `/api/cursos/:id` | **GESTORA+** | Atualizar |
+| POST | `/api/cursos/concluir` | Autenticado | Marcar conclusão |
+
+### Notificações — `/api/notificacoes`
+
+| Método | Rota | Nível | Descrição |
+|--------|------|--------|-----------|
+| GET | `/api/notificacoes/minhas` | Autenticado | Caixa de notificações internas |
+| POST | `/api/notificacoes/whatsapp/enviar-manual` | **GESTORA+** | Disparo manual (fila) |
+| POST | `/api/notificacoes/whatsapp/processar-fila` | **GESTORA+** | Processar fila (também roda no cron) |
+
+### Auditoria — `/api/auditoria` (**GESTORA+**)
+
+| Método | Rota | Query comuns | Descrição |
+|--------|------|----------------|-----------|
+| GET | `/api/auditoria` | `entidade`, `usuario`, `de`, `ate`, `limite` (padrão 100, máx. 500), `pagina` (padrão 1) | Lista paginada com total |
+
+### Relatórios gerenciais — `/api/relatorios-gerenciais`
+
+| Método | Rota | Regras | Descrição |
+|--------|------|--------|-----------|
+| GET | `/api/relatorios-gerenciais/espelho-ponto` | Autenticado; `ESTAGIARIO` só `usuarioId` próprio; query `mes`, `ano`, `usuarioId` | PDF `application/pdf` |
+| GET | `/api/relatorios-gerenciais/resumo-equipe` | **ASSESSORA_JR+**; `de`, `ate` | Indicadores no intervalo |
+
+**Rate limit global (rotas com rate limit habilitado no plugin):** `RATE_LIMIT_API_MAX` requisições por `RATE_LIMIT_API_WINDOW_MIN` minutos por usuário (ou IP se não autenticado), exceto onde há config específica (login, IA).
+
+---
+
+## Frontend web (Next.js) – páginas e comportamento
+
+- **URL base da API:** `NEXT_PUBLIC_API_URL` (em produção costuma ser `https://<domínio>/api`). Se não definido, o client usa `'/api` relativo (adequado se o browser já estiver no mesmo host que a API). Em desenvolvimento local, defina por exemplo `http://localhost:4000/api` em `apps/web/.env.local`. Ver [apps/web/lib/api.ts](apps/web/lib/api.ts).
+
+### Rotas App Router
+
+| Rota | Função |
+|------|--------|
+| `/` | Login (`react-hook-form` + Zod; redireciona para `/aceite-pop` ou `/dashboard`) |
+| `/aceite-pop` | Aceite obrigatório do POP (primeiro acesso) |
+| `/dashboard` | Painel principal |
+| `/ponto` | Ponto digital |
+| `/checklist` | Checklist 5S |
+| `/demandas` | Lista; `/demandas/nova` cria; `/demandas/[id]` detalhe |
+| `/relatorio` | Relatório diário |
+| `/produtividade` | Ranking e desempenho (ex.: gráfico 8 semanas) |
+| `/chat-ia` | Chat Claude |
+| `/certificados` | Meus certificados |
+| `/cursos` | Cursos e progresso |
+| `/espelho-ponto` | Geração/visualização do espelho (PDF via API) |
+| `/notificacoes` | Notificações |
+| `/auditoria` | Consulta (apenas **GESTORA+** no menu) |
+
+O layout `(painel)` exige `accessToken` e `usuario` no Zustand; redireciona para `/` se inválido e força `/aceite-pop` quando `precisaAceitarPop`. Ver [apps/web/app/(painel)/layout.tsx](apps/web/app/(painel)/layout.tsx) e [apps/web/components/shared/cabecalho.tsx](apps/web/components/shared/cabecalho.tsx).
+
+**Design:** Tailwind com identidade navy/dourado (`globals.css` + classes utilitárias institucionais).
+
+---
+
+## App mobile (Expo)
+
+Resumo: login, aceite POP, abas (Início, Ponto, Relatório, Checklist, Demandas), armazenamento seguro de token, `EXPO_PUBLIC_API_URL` para apontar a API (em dispositivo físico use IP da máquina, não `localhost`).
+
+Documentação detalhada: [apps/mobile/README.md](apps/mobile/README.md).
+
+---
+
+## Fluxos de negócio principais
+
+### 1) Autenticação e sessão
+Login retorna access + refresh + dados do usuário (incl. `precisaAceitarPop`). Refresh em `/api/auth/refresh`. Senha: política mínima e **histórico das últimas 5 senhas** (constante `SENHA_HISTORICO_BLOQUEADO` em `@rb/constants`).
+
+### 2) Aceite do POP
+Exibição do texto (`/api/pop/texto`) e aceite (`/api/auth/aceitar-pop`) com versão (`POP_EST_VERSAO_ATUAL`); registro de IP/UA no modelo de usuário.
+
+### 3) Ponto digital
+Sequência fixa de tipos; **foto obrigatória** (limite de bytes em `PONTO_FOTO_MAX_BYTES`); IP e User-Agent; **SAIDA_FINAL** condicionada ao relatório (regra no domínio/serviço). **Edição** apenas **GESTORA+** com justificativa mínima (`PONTO_JUSTIFICATIVA_MIN`).
+
+### 4) Relatório diário
+Três campos de texto com mínimos (`RELATORIO_MIN_CARACTERES`); se “demanda concluída” = não, justificativa obrigatória; atestado opcional com tipos e MIME (`UPLOAD_MIMES_ATESTADO`).
+
+### 5) Checklist 5S
+Itens filtrados por categoria, perfil, presencial/remoto; respostas idempotentes por `(usuário, item, data)`; progresso agregado no dia.
+
+### 6) Demandas
+Criação por **ASSESSORA_JR+**; transições de status; **delegação** só “para baixo” na hierarquia; **correção** com notas **0, 8 ou 10** e feedback; prazo e alertas via job/WhatsApp.
+
+### 7) Produtividade e ranking
+Pontuação semanal com teto 100 pontos, componentes: pontualidade (25), qualidade (40), extras (15), checklist (10), relatórios (10) — ver `PONTOS_MAXIMOS_SEMANA` em `@rb/constants`. **Cálculo automático** na segunda 07:00; emissão de certificados do pódio integrada ao job (conforme `ranking-semanal.job`).
+
+### 8) WhatsApp (Z-API)
+Mensagens enfileiradas em `notificacoes_whatsapp` com retentativas; processamento **a cada minuto** + jobs de negócio (lembretes, prazos).
+
+### 9) IA
+Conversas em `chat_ia_mensagens` por `conversaId`; limite de histórico e consumo de tokens controlados no serviço; system prompt jurídico interno (arquivos em `modules/ia` / integração Anthropic).
+
+### 10) PDFs
+Certificados e espelho de ponto via **Puppeteer**; browser encerrado no shutdown da API (`encerrarBrowserPdf`).
+
+### 11) Auditoria
+Gravação automática via plugin de auditoria nas ações sensíveis; listagem com filtros para **GESTORA+**.
+
+---
+
+## Jobs agendados (cron)
+
+Definidos em [apps/api/src/jobs/index.ts](apps/api/src/jobs/index.ts), timezone **`America/Bahia`**.  
+**Importante:** os crons **só são iniciados quando `NODE_ENV === 'production'`** em [apps/api/src/server.ts](apps/api/src/server.ts). Em `development` os jobs **não** rodam.
+
+| Schedule | Job | Função resumida |
+|----------|-----|-----------------|
+| `30 8 * * 1-5` | lembrete-ponto | Lembretes de ponto (ex.: estagiários sem entrada) |
+| `0 7 * * 1-5` | alerta-prazo | Demandas a D-3, D-2, D-1 |
+| `0 7 * * 1` | ranking-semanal | Cálculo de ranking / certificados semanais |
+| `0 19 * * 1-5` | lembrete-relatorio | Relatórios faltantes |
+| `* * * * *` | fila-whatsapp | Processa fila de mensagens |
+
+---
+
+## Integrações externas
+
+| Sistema | Uso | Configuração |
+|---------|-----|--------------|
+| **Z-API** | WhatsApp | `ZAPI_INSTANCE_ID`, `ZAPI_TOKEN`, `ZAPI_CLIENT_TOKEN`, `ZAPI_BASE_URL` |
+| **Anthropic** | Chat IA | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, `ANTHROPIC_MAX_TOKENS` |
+| **Let’s Encrypt** | TLS no Traefik | `TRAEFIK_ACME_EMAIL` + `traefik/acme.json` |
+| **rclone** (opcional) | Backup em nuvem | `RCLONE_REMOTE`, `BACKUP_PREFIXO`, `GPG_PUBLIC_KEY_ID` |
+
+Templates de mensagem WhatsApp e cliente HTTP: `apps/api/src/integrations/zapi/`.
+
+---
+
+## Pacotes compartilhados `@rb/*`
+
+- **`@rb/constants`:** perfis, hierarquia, tipos de ponto, status de demanda, notas de correção, limites de senha, categorias de checklist, ações de auditoria, somatório máximo de pontos.  
+- **`@rb/validators`:** schemas Zod usados na API (e espelhados no web com react-hook-form).  
+- **`@rb/types`:** DTOs (ex.: `RespostaLogin`, `UsuarioSessao`).  
+- **`@rb/utils`:** `dayjs` com fuso, `semanaReferencia`, rótulos de perfil, regras auxiliares.
+
+O `apps/web` configura `transpilePackages` para estes pacotes no Next.js.
+
+---
+
+## Variáveis de ambiente
+
+Referência: [.env.example](.env.example) na raiz. Campos críticos:
+
+- Banco: `DATABASE_URL` (em Docker: host `db`; no host Windows com só Postgres no Docker: `127.0.0.1` e porta mapeada, ex. `5433`).  
+- JWT: `JWT_SECRET`, `JWT_REFRESH_SECRET` (mín. 32 caracteres no validator da API), expirações.  
+- `NEXT_PUBLIC_API_URL` para o browser alcançar a API.  
+- Limites: upload, rate limits, bcrypt.  
+- Seed: `SEED_SOCIO_*`, `SEED_GESTORA_*`, `POP_EST_VERSAO_ATUAL`.
+
+A API carrega `.env` da **raiz do monorepo** e, em seguida, `apps/api/.env` (override). Ver [apps/api/src/config/env.ts](apps/api/src/config/env.ts).
+
+---
+
+## Instalação e execução
+
+### Requisitos
+- Node.js **≥ 24**  
+- **pnpm** 9.x (recomendado 9.12)  
+- PostgreSQL **16** (local ou via Docker)  
+
+### Monorepo (desenvolvimento)
 
 ```bash
 pnpm install
 cp .env.example .env
-# Ajustar DATABASE_URL para postgres local ou docker
+# Ajuste DATABASE_URL, segredos JWT e NEXT_PUBLIC_API_URL (ex.: http://localhost:4000/api para o web em dev)
+```
 
+**Prisma (na ordem):**
+
+```bash
 pnpm --filter @rb/api prisma generate
 pnpm --filter @rb/api prisma migrate dev
 pnpm --filter @rb/api seed
-
-pnpm dev  # roda turbo em paralelo (api + web)
 ```
 
-### Testes
+**Subir tudo em modo dev (API + web via Turbo):**
 
 ```bash
-pnpm test                          # roda em todos os workspaces
-pnpm --filter @rb/api test         # somente backend
-pnpm --filter @rb/utils test       # somente utils
+pnpm dev
 ```
 
-Testes de dominio cobrem:
-- Sequencia e antifraude de ponto (`ponto.domain.test.ts`)
-- Hierarquia de delegacao e status apos correcao (`demandas.domain.test.ts`)
-- Calculo de pontuacao semanal (`produtividade.domain.test.ts`)
-- Validacao de forca de senha (`packages/utils/src/senha.test.ts`)
+- API: porta **4000** (padrão `API_PORT`).  
+- Web: porta **3000**.  
 
-## Endpoints principais
+### Docker Compose (produção / homologação)
 
-### Publicos
-| Metodo | Rota |
-|---|---|
-| POST | `/api/auth/login` |
-| POST | `/api/auth/refresh` |
-| GET  | `/api/health` |
+1. `cp .env.example .env` e preencha todos os placeholders.  
+2. `touch traefik/acme.json && chmod 600 traefik/acme.json` (em Linux; no Windows adapte permissões conforme o ambiente).  
+3. `docker compose up -d --build`  
+4. `docker compose exec api pnpm prisma migrate deploy`  
+5. `docker compose exec api pnpm seed`  
 
-### Autenticado (qualquer perfil)
-| Metodo | Rota |
-|---|---|
-| POST | `/api/auth/logout` |
-| POST | `/api/auth/trocar-senha` |
-| POST | `/api/auth/aceitar-pop` |
-| GET  | `/api/eu` |
-| POST | `/api/ponto/registrar` |
-| GET  | `/api/ponto/hoje` |
-| GET  | `/api/ponto/historico` |
-| POST | `/api/relatorios/enviar` |
-| GET  | `/api/relatorios/meus` |
-| GET  | `/api/relatorios/hoje` |
-| POST | `/api/relatorios/atestado/upload` |
-| GET  | `/api/checklist/itens` |
-| POST | `/api/checklist/responder` |
-| GET  | `/api/checklist/progresso-hoje` |
-| GET  | `/api/demandas/minhas` |
-| GET  | `/api/demandas/:id` |
-| PUT  | `/api/demandas/:id/status` |
-| GET  | `/api/produtividade/ranking-semanal` |
-| GET  | `/api/produtividade/meu-desempenho` |
-| GET  | `/api/pop/texto` |
-| POST | `/api/ia/chat` |
-| GET  | `/api/ia/conversas` |
-| GET  | `/api/ia/conversas/:id` |
-| DELETE | `/api/ia/conversas/:id` |
-| GET  | `/api/ia/consumo` |
-| GET  | `/api/certificados/meus` |
-| GET  | `/api/certificados/:id/download` |
-| GET  | `/api/cursos` |
-| GET  | `/api/cursos/meu-progresso` |
-| POST | `/api/cursos/concluir` |
-| GET  | `/api/notificacoes/minhas` |
-| GET  | `/api/relatorios-gerenciais/espelho-ponto` |
+Serviços: `db` (Postgres, porta publicada `127.0.0.1:5433:5432`), `api`, `web`, `traefik`, `backup`. Uploads: volume `rb_uploads`. Documentos POP: `./docs` montado em somente leitura no container da API.
 
-### Assessora junior ou superior
-| Metodo | Rota |
-|---|---|
-| GET  | `/api/relatorios/equipe` |
-| POST | `/api/relatorios/:id/marcar-lido` |
-| GET  | `/api/demandas/equipe` |
-| POST | `/api/demandas` |
-| POST | `/api/demandas/:id/delegar` |
-| POST | `/api/demandas/:id/corrigir` |
-| GET  | `/api/checklist/equipe-hoje` |
-| GET  | `/api/relatorios-gerenciais/resumo-equipe` |
+### O que o seed cria
+- Sócio titular e gestora (emails/senhas via env).  
+- Itens de checklist 5S (idempotente por categoria+texto).  
+- Cursos obrigatórios (LGPD, ética, POP para estagiário, etc.).
 
-### Gestora ou superior
-| Metodo | Rota |
-|---|---|
-| GET/POST/PUT/DELETE | `/api/users/...` |
-| POST | `/api/users/:id/resetar-senha` |
-| PUT  | `/api/ponto/:id/editar` |
-| POST/PUT/DELETE | `/api/checklist/itens/...` |
-| POST | `/api/produtividade/calcular` |
-| GET  | `/api/auditoria` |
-| POST | `/api/certificados/emitir` |
-| POST | `/api/certificados/emitir-semanais` |
-| GET  | `/api/certificados/usuario/:usuarioId` |
-| POST/PUT | `/api/cursos/...` |
-| POST | `/api/notificacoes/whatsapp/enviar-manual` |
-| POST | `/api/notificacoes/whatsapp/processar-fila` |
+**Trocar as senhas seed no primeiro acesso.**
 
-## Conformidade legal
+---
 
-- **Lei 11.788/2008** (Estagio): jornada, supervisao, atividades compativeis, recesso.
-- **LGPD (Lei 13.709/2018)**: aceite com IP/User-Agent, foto com finalidade especifica, trilha de auditoria, DPO indicado (Dr. Ricardo Bulhoes).
-- **Estatuto da OAB e Res. CFOAB 5/2010**: sigilo profissional, atividades vedadas, controle de acesso.
+## Testes e qualidade
 
-## Convencoes de desenvolvimento
+```bash
+pnpm test                    # all workspaces
+pnpm --filter @rb/api test  # backend (Vitest)
+pnpm lint
+pnpm typecheck
+```
 
-- Commits seguem Conventional Commits (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`).
-- Antes de merge: `pnpm lint && pnpm typecheck && pnpm test` verdes.
-- TDD para toda regra de dominio: escrever teste primeiro nos arquivos `*.domain.test.ts`.
-- Nomes descritivos em portugues para funcoes de dominio; ingles apenas para termos tecnicos (repository, service, controller).
+Cobertura de domínio (exemplos): ponto, demandas, produtividade, força de senha (`packages/utils`).
 
-## Contato tecnico
+---
 
-Duvidas ou incidentes: gestora Larissa, que articula com o fornecedor de infraestrutura.
+## Infraestrutura (Docker, Traefik, backup)
+
+- **Traefik:** regras em [docker-compose.yml](docker-compose.yml) — `Host(APP_DOMAIN) && PathPrefix(/api)` → API; `Host(APP_DOMAIN)` com prioridade para o frontend.  
+- **Backup:** serviço `rb-backup`, cron interno, `pg_dump` + upload; ver [scripts/backup/README.md](scripts/backup/README.md).  
+
+---
+
+## Conformidade e governança
+
+- **Lei 11.788/2008** (estágio), **LGPD 13.709/2018**, **Estatuto da OAB / Res. CF OAB 5/2010** (sigilo e limites) — conforme políticas descritas na documentação interna e rastreabilidade (POP, fotos, auditoria).  
+- DPO e bases legais conforme processos do escritório (referência geral no README histórico).
+
+---
+
+## Convenções de desenvolvimento
+
+- Commits: **Conventional Commits** (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`).  
+- Antes de integrar: `pnpm lint && pnpm typecheck && pnpm test`.  
+- Regras de domínio novas: preferir TDD em `*.domain.test.ts`.  
+- Nomes de regra de negócio em **português** nos domínios; termos técnicos de código em **inglês** quando convencionado (controller, service).
+
+---
+
+## Contato técnico (interno)
+
+Dúvidas operacionais ou de infraestrutura: canal definido internamente (ex.: gestão + fornecedor de TI).
+
+---
+
+*Este guia descreve o estado atual do código no repositório. Em caso de divergência, prevalecem os arquivos de implementação (`apps/api`, `apps/web`, `prisma/schema.prisma`) e o `.env.example`.*

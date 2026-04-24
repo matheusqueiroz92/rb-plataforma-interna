@@ -1,8 +1,9 @@
 {
   "extends": "@rb/typescript-config/node.json",
   "compilerOptions": {
+    "target": "es2022",
     "outDir": "./dist",
-    "rootDir": "./src",
+    "rootDir": ".",
     "baseUrl": "./src",
     "paths": {
       "@/*": ["*"]

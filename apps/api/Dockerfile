@@ -20,10 +20,13 @@ RUN pnpm install --frozen-lockfile || pnpm install
 
 FROM base AS build
 WORKDIR /repo
-COPY --from=deps /repo/node_modules ./node_modules
-COPY --from=deps /repo/apps/api/node_modules ./apps/api/node_modules
+COPY --from=deps /repo/ ./
 COPY . .
-RUN pnpm --filter @rb/constants --filter @rb/types --filter @rb/utils --filter @rb/validators build
+RUN pnpm install --frozen-lockfile --prefer-offline || pnpm install
+RUN pnpm --filter @rb/constants build && \
+    pnpm --filter @rb/types build && \
+    pnpm --filter @rb/utils build && \
+    pnpm --filter @rb/validators build
 RUN pnpm --filter @rb/api exec prisma generate
 RUN pnpm --filter @rb/api build
 

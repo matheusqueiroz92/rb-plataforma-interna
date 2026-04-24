@@ -18,10 +18,13 @@ RUN pnpm install --frozen-lockfile || pnpm install
 
 FROM base AS builder
 WORKDIR /repo
-COPY --from=deps /repo/node_modules ./node_modules
-COPY --from=deps /repo/apps/web/node_modules ./apps/web/node_modules
+COPY --from=deps /repo/ ./
 COPY . .
-RUN pnpm --filter @rb/constants --filter @rb/types --filter @rb/utils --filter @rb/validators build
+RUN pnpm install --frozen-lockfile --prefer-offline || pnpm install
+RUN pnpm --filter @rb/constants build && \
+    pnpm --filter @rb/types build && \
+    pnpm --filter @rb/utils build && \
+    pnpm --filter @rb/validators build
 RUN pnpm --filter @rb/web build
 
 FROM node:24-alpine AS runner

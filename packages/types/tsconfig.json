@@ -3,6 +3,10 @@
   "compilerOptions": {
     "module": "ESNext",
     "moduleResolution": "Bundler",
+    "baseUrl": ".",
+    "paths": {
+      "@rb/constants": ["../constants/dist/index.d.ts"]
+    },
     "rootDir": "./src",
     "outDir": "./dist"
   },

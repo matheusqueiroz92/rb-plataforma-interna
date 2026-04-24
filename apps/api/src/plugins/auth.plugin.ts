@@ -42,8 +42,12 @@ export const authPlugin = fp(async (app: FastifyInstance) => {
       throw new ErroAutenticacao('Token invalido ou expirado');
     }
 
+    const payload = req.user as Partial<PayloadToken> & { id?: string };
+    const usuarioId = payload.sub ?? payload.id;
+    if (!usuarioId) throw new ErroAutenticacao('Token invalido ou expirado');
+
     const usuario = await prisma.usuario.findUnique({
-      where: { id: req.user.id },
+      where: { id: usuarioId },
       select: { id: true, perfil: true, matricula: true, nome: true, status: true },
     });
     if (!usuario) throw new ErroAutenticacao('Usuario nao encontrado');

@@ -1,5 +1,15 @@
-import 'dotenv/config';
+import { config as carregarEnv } from 'dotenv';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { SignOptions } from 'jsonwebtoken';
 import { z } from 'zod';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const raizApi = resolve(__dirname, '../..');
+const raizMonorepo = resolve(__dirname, '../../../..');
+
+carregarEnv({ path: resolve(raizMonorepo, '.env') });
+carregarEnv({ path: resolve(raizApi, '.env'), override: true });
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('production'),
@@ -10,8 +20,8 @@ const envSchema = z.object({
 
   JWT_SECRET: z.string().min(32, 'JWT_SECRET deve ter ao menos 32 caracteres'),
   JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET deve ter ao menos 32 caracteres'),
-  JWT_EXPIRES_IN: z.string().default('2h'),
-  JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
+  JWT_EXPIRES_IN: z.custom<NonNullable<SignOptions['expiresIn']>>((value) => typeof value === 'string' || typeof value === 'number').default('2h'),
+  JWT_REFRESH_EXPIRES_IN: z.custom<NonNullable<SignOptions['expiresIn']>>((value) => typeof value === 'string' || typeof value === 'number').default('7d'),
   BCRYPT_COST: z.coerce.number().int().min(10).max(15).default(12),
 
   API_PORT: z.coerce.number().int().default(4000),
