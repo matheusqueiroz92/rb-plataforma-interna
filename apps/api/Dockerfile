@@ -96,5 +96,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
     CMD wget --quiet --tries=1 --spider http://localhost:4000/api/health || exit 1
 
 # Entrypoint roda migrate deploy automaticamente, depois inicia o server.
+# Nota: dist/src/server.js (nao dist/server.js) porque o tsc preserva a
+# estrutura de pastas quando ha arquivos compilados fora de src/ (ex.: prisma/
+# seed, prisma.config.ts), o que faz o rootDir ser a raiz de apps/api/.
 ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["sh", "-c", "pnpm exec prisma migrate deploy && exec node dist/server.js"]
+CMD ["sh", "-c", "pnpm exec prisma migrate deploy && exec node dist/src/server.js"]
