@@ -34,7 +34,7 @@ export async function rankingSemanal(): Promise<void> {
         nome: usuario.nome,
         tipoCertificado: c.tipo,
         semana: c.periodoReferencia,
-        posicao: c.posicaoFinal,
+        posicao: c.posicaoFinal ?? undefined,
         pontos: c.pontuacaoObtida,
       });
     }

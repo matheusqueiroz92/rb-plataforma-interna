@@ -9,21 +9,29 @@ export async function certificadosRoutes(app: FastifyInstance): Promise<void> {
   const controller = new CertificadosController(service);
 
   app.get('/meus', { onRequest: [app.autenticar] }, controller.meus);
-  app.get('/:id/download', { onRequest: [app.autenticar] }, controller.download);
+  app.get<{ Params: { id: string } }>('/:id/download', { onRequest: [app.autenticar] }, controller.download);
 
-  app.get(
+  app.get<{ Params: { usuarioId: string } }>(
     '/usuario/:usuarioId',
     { onRequest: [app.autenticar, app.exigirNivelMinimo('GESTORA')] },
     controller.doUsuario,
   );
 
-  app.post(
+  app.post<{ Body: { semana: string } }>(
     '/emitir-semanais',
     { onRequest: [app.autenticar, app.exigirNivelMinimo('GESTORA')] },
     controller.emitirSemanais,
   );
 
-  app.post(
+  app.post<{
+    Body: {
+      usuarioId: string;
+      tipo: import('@rb/constants').TipoCertificado;
+      periodoReferencia: string;
+      pontuacaoObtida: number;
+      posicaoFinal: number;
+    };
+  }>(
     '/emitir',
     { onRequest: [app.autenticar, app.exigirNivelMinimo('GESTORA')] },
     controller.emitirManual,

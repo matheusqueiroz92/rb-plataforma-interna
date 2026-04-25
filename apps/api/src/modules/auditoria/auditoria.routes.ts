@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 
 import { AuditoriaService } from './auditoria.service.js';
 import { PrismaAuditoriaRepository } from './auditoria.repository.js';
@@ -15,10 +15,10 @@ interface FiltroQuery {
 export async function auditoriaRoutes(app: FastifyInstance): Promise<void> {
   const service = new AuditoriaService(new PrismaAuditoriaRepository());
 
-  app.get(
+  app.get<{ Querystring: FiltroQuery }>(
     '/',
     { onRequest: [app.autenticar, app.exigirNivelMinimo('GESTORA')] },
-    async (req: FastifyRequest<{ Querystring: FiltroQuery }>) => {
+    async (req) => {
       return service.listar({
         entidade: req.query.entidade,
         usuarioId: req.query.usuario,

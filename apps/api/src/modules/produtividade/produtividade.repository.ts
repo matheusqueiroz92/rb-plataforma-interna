@@ -1,4 +1,5 @@
 import { prisma } from '../../shared/prisma/prisma.js';
+import type { PerfilChecklist } from '@prisma/client';
 
 export interface DadosBrutosSemana {
   usuarioId: string;
@@ -57,6 +58,9 @@ export class PrismaProdutividadeRepository implements IProdutividadeRepository {
 
     const resultado: DadosBrutosSemana[] = [];
     for (const u of usuarios) {
+      const perfilChecklist: PerfilChecklist =
+        u.perfil === 'ESTAGIARIO' || u.perfil === 'ASSESSORA_JR' ? u.perfil : 'TODOS';
+
       const [pontos, demandas, respostas, itensAplicaveis, relatorios] = await Promise.all([
         prisma.ponto.findMany({
           where: {
@@ -80,7 +84,7 @@ export class PrismaProdutividadeRepository implements IProdutividadeRepository {
           },
         }),
         prisma.checklistItem.count({
-          where: { ativo: true, perfilAlvo: { in: ['TODOS', u.perfil] } },
+          where: { ativo: true, perfilAlvo: { in: ['TODOS', perfilChecklist] } },
         }),
         prisma.relatorioDiario.findMany({
           where: { usuarioId: u.id, data: { gte: dataInicio, lte: dataFim } },

@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance } from 'fastify';
 
 import { RelatoriosGerenciaisService } from './relatorios-gerenciais.service.js';
 import { ErroAutenticacao, ErroValidacao } from '../../shared/errors/app-error.js';
@@ -6,13 +6,10 @@ import { ErroAutenticacao, ErroValidacao } from '../../shared/errors/app-error.j
 export async function relatoriosGerenciaisRoutes(app: FastifyInstance): Promise<void> {
   const service = new RelatoriosGerenciaisService();
 
-  app.get(
+  app.get<{ Querystring: { mes?: string; ano?: string; usuarioId?: string } }>(
     '/espelho-ponto',
     { onRequest: [app.autenticar] },
-    async (
-      req: FastifyRequest<{ Querystring: { mes?: string; ano?: string; usuarioId?: string } }>,
-      reply,
-    ) => {
+    async (req, reply) => {
       if (!req.user) throw new ErroAutenticacao();
       const mes = req.query.mes ? parseInt(req.query.mes, 10) : new Date().getMonth() + 1;
       const ano = req.query.ano ? parseInt(req.query.ano, 10) : new Date().getFullYear();
@@ -37,10 +34,10 @@ export async function relatoriosGerenciaisRoutes(app: FastifyInstance): Promise<
     },
   );
 
-  app.get(
+  app.get<{ Querystring: { de?: string; ate?: string } }>(
     '/resumo-equipe',
     { onRequest: [app.autenticar, app.exigirNivelMinimo('ASSESSORA_JR')] },
-    async (req: FastifyRequest<{ Querystring: { de?: string; ate?: string } }>) => {
+    async (req) => {
       const hoje = new Date();
       const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
       const de = req.query.de ? new Date(req.query.de) : primeiroDia;

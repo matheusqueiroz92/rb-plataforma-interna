@@ -15,11 +15,14 @@ export class ProdutividadeService {
 
   private intervaloDaSemana(semana: string): { inicio: Date; fim: Date } {
     const [ano, semanaStr] = semana.split('-W');
-    const numero = parseInt(semanaStr ?? '1', 10);
-    const base = dayjs().tz('America/Bahia').isoWeekYear(parseInt(ano ?? '', 10) || dayjs().year());
-    const dataSemana = base.isoWeek(numero);
-    const inicio = dataSemana.startOf('isoWeek').toDate();
-    const fim = dataSemana.endOf('isoWeek').toDate();
+    const numero = Math.max(1, parseInt(semanaStr ?? '1', 10) || 1);
+    const anoNumero = parseInt(ano ?? '', 10) || dayjs().tz('America/Bahia').year();
+
+    // ISO week 1 is the week containing Jan 4th.
+    const referencia = dayjs.tz(`${anoNumero}-01-04`, 'America/Bahia');
+    const inicioSemana1 = referencia.startOf('isoWeek');
+    const inicio = inicioSemana1.add(numero - 1, 'week').startOf('isoWeek').toDate();
+    const fim = dayjs(inicio).tz('America/Bahia').endOf('isoWeek').toDate();
     return { inicio, fim };
   }
 
