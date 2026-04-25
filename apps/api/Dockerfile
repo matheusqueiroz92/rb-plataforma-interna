@@ -43,19 +43,17 @@ COPY . .
 #   em modo offline, falhando com ERR_PNPM_NO_OFFLINE_TARBALL.
 
 # Build dos packages compartilhados (na ordem certa)
-# DEBUG: separamos os builds e listamos o dist/ apos cada um pra detectar
-# se algum package nao esta emitindo .d.ts (causa do TS7016).
 RUN pnpm --filter @rb/constants build && \
-    echo "=== constants/dist apos build ===" && \
-    ls -la /repo/packages/constants/dist/ && \
     pnpm --filter @rb/types build && \
-    echo "=== types/dist apos build ===" && \
-    ls -la /repo/packages/types/dist/ && \
     pnpm --filter @rb/utils build && \
     pnpm --filter @rb/validators build
 
 # Gera Prisma Client (engine para alpine/musl, mesma plataforma do runner)
-RUN pnpm --filter @rb/api exec prisma generate
+# DATABASE_URL dummy: `prisma generate` NAO conecta no banco, so valida o schema
+# e gera o client TS. Em runtime o DATABASE_URL real vem do .env via compose.
+# Sem isso, o Prisma reclama "Argument 'url' is missing" em build-time.
+RUN DATABASE_URL="postgresql://placeholder:placeholder@placeholder:5432/placeholder?schema=public" \
+    pnpm --filter @rb/api exec prisma generate
 
 # Build da API (gera apps/api/dist/)
 RUN pnpm --filter @rb/api build

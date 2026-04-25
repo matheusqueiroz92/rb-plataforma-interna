@@ -52,14 +52,8 @@ COPY . .
 #   com ERR_PNPM_NO_OFFLINE_TARBALL.
 
 # Build dos pacotes compartilhados primeiro
-# DEBUG: separamos os builds e listamos o dist/ apos cada um pra detectar
-# se algum package nao esta emitindo .d.ts (causa do TS7016).
 RUN pnpm --filter @rb/constants build && \
-    echo "=== constants/dist apos build ===" && \
-    ls -la /repo/packages/constants/dist/ && \
     pnpm --filter @rb/types build && \
-    echo "=== types/dist apos build ===" && \
-    ls -la /repo/packages/types/dist/ && \
     pnpm --filter @rb/utils build && \
     pnpm --filter @rb/validators build
 
