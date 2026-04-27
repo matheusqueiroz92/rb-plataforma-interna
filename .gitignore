@@ -17,3 +17,4 @@ Thumbs.db
 .vscode/
 traefik/certs/
 traefik/acme.json
+*.tsbuildinfo
