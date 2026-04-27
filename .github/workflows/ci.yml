@@ -30,18 +30,22 @@ jobs:
       - name: Generate Prisma Client
         run: pnpm --filter @rb/api exec prisma generate
 
-      - name: Lint
-        run: pnpm lint
-
-      - name: Typecheck
-        run: pnpm typecheck
-
+      # IMPORTANTE: build dos shared packages PRECISA vir antes de lint/typecheck.
+      # O `turbo run lint` builda dependencias em paralelo, e como ha race condition
+      # entre @rb/constants emitir .d.ts e @rb/types tentar consumir, falha com TS7016.
+      # Buildando aqui primeiro, o turbo encontra o cache em disco e nao rebuilda.
       - name: Build shared packages
         run: |
           pnpm --filter @rb/constants build
           pnpm --filter @rb/types build
           pnpm --filter @rb/utils build
           pnpm --filter @rb/validators build
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
 
       - name: Build API
         run: pnpm --filter @rb/api build
