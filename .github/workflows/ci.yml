@@ -59,8 +59,10 @@ jobs:
       # - name: Lint
       #   run: pnpm lint
 
+      # Typecheck filtra @rb/mobile porque o mobile (React Native/Expo) nao faz parte
+      # deste deploy (so api + web vao para a VPS). Mobile tem pipeline proprio.
       - name: Typecheck
-        run: pnpm typecheck
+        run: pnpm exec turbo run typecheck --filter='!@rb/mobile'
 
       - name: Build API
         run: pnpm --filter @rb/api build
@@ -108,8 +110,9 @@ jobs:
           pnpm --filter @rb/utils build
           pnpm --filter @rb/validators build
 
+      # Test tambem filtra @rb/mobile pelo mesmo motivo do typecheck.
       - name: Run tests
-        run: pnpm test
+        run: pnpm exec turbo run test --filter='!@rb/mobile'
 
   docker:
     runs-on: ubuntu-latest
