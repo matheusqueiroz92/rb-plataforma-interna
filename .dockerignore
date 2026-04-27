@@ -10,3 +10,4 @@ node_modules
 *.log
 coverage
 apps/**/uploads
+**/*.tsbuildinfo
