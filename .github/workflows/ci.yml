@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.12.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @rb/api exec prisma generate
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build shared packages
+        run: |
+          pnpm --filter @rb/constants build
+          pnpm --filter @rb/types build
+          pnpm --filter @rb/utils build
+          pnpm --filter @rb/validators build
+
+      - name: Build API
+        run: pnpm --filter @rb/api build
+
+      - name: Build Web
+        env:
+          # Mesma URL do .env de producao - inlinada no bundle Next.js em build-time.
+          NEXT_PUBLIC_API_URL: https://rb-interno.reboucasbulhoes.com/api
+        run: pnpm --filter @rb/web build
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint-and-build
+
+    env:
+      NODE_ENV: test
+      # Segredos fake apenas para o validator Zod aceitar (testes nao usam de verdade)
+      JWT_SECRET: ci-test-secret-with-at-least-32-characters-long
+      JWT_REFRESH_SECRET: ci-test-refresh-secret-different-from-jwt-aaa
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9.12.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: pnpm --filter @rb/api exec prisma generate
+
+      - name: Build shared packages
+        run: |
+          pnpm --filter @rb/constants build
+          pnpm --filter @rb/types build
+          pnpm --filter @rb/utils build
+          pnpm --filter @rb/validators build
+
+      - name: Run tests
+        run: pnpm test
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [lint-and-build, test]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build API image (sanity check)
+        run: docker build -f apps/api/Dockerfile -t rb-interno-api:ci .
+
+      - name: Build Web image (sanity check)
+        run: |
+          docker build \
+            -f apps/web/Dockerfile \
+            --build-arg NEXT_PUBLIC_API_URL=https://rb-interno.reboucasbulhoes.com/api \
+            -t rb-interno-web:ci .
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [lint-and-build, test]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /var/www/rb-interno
+            git pull origin main
+            cd /opt/apps/rb-interno
+            docker compose build --no-cache api web
+            docker compose up -d --force-recreate api web
+            docker image prune -f
