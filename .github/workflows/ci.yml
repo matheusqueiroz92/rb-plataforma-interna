@@ -138,7 +138,11 @@ jobs:
           script: |
             set -euo pipefail
             cd /var/www/rb-interno
-            git pull origin main
+            # `git reset --hard` em vez de `git pull` para garantir que a VPS sempre
+            # fica IDENTICA ao main remoto, mesmo se houver edicoes locais por engano.
+            # O diretorio de deploy nao deveria ter estado local — ele e um espelho.
+            git fetch origin main
+            git reset --hard origin/main
             cd /opt/apps/rb-interno
             docker compose build --no-cache api web
             docker compose up -d --force-recreate api web
