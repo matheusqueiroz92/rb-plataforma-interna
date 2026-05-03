@@ -1,5 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 
 const prisma = new PrismaClient();
 const BCRYPT_COST = parseInt(process.env.BCRYPT_COST ?? '12', 10);
@@ -109,6 +111,83 @@ async function semearCursos(): Promise<void> {
   }
 }
 
+async function semearPopInicial(): Promise<void> {
+  const titulo = 'POP-EST-001 - Procedimento Operacional do Estagiario';
+  const versao = '1.0';
+  const existente = await prisma.popDocumento.findUnique({
+    where: { perfil_versao: { perfil: 'ESTAGIARIO', versao } },
+  });
+  if (existente) return;
+
+  const caminhos = [
+    path.resolve(process.cwd(), 'docs', 'POP-EST-001.md'),
+    path.resolve(process.cwd(), '..', '..', 'docs', 'POP-EST-001.md'),
+    path.resolve(process.cwd(), '..', 'docs', 'POP-EST-001.md'),
+  ];
+
+  let conteudoMarkdown =
+    '# POP-EST-001\n\nConteudo inicial nao localizado automaticamente. Atualize este rascunho no painel.';
+  for (const caminho of caminhos) {
+    try {
+      conteudoMarkdown = await fs.readFile(caminho, 'utf-8');
+      break;
+    } catch {
+      // tenta proximo caminho
+    }
+  }
+
+  await prisma.popDocumento.create({
+    data: {
+      perfil: 'ESTAGIARIO',
+      titulo,
+      versao,
+      conteudoMarkdown,
+      status: 'PUBLICADO',
+      vigente: true,
+    },
+  });
+
+  const perfisSemVigente = ['SOCIO', 'GESTORA', 'ASSESSORA_JR'] as const;
+  for (const perfil of perfisSemVigente) {
+    const vigenteExistente = await prisma.popDocumento.findFirst({
+      where: { perfil, status: 'PUBLICADO', vigente: true },
+    });
+    if (vigenteExistente) continue;
+
+    const documentoExistente = await prisma.popDocumento.findFirst({
+      where: { perfil },
+      orderBy: { criadoEm: 'desc' },
+    });
+
+    if (documentoExistente) {
+      await prisma.popDocumento.updateMany({
+        where: { perfil, vigente: true },
+        data: { vigente: false },
+      });
+      await prisma.popDocumento.update({
+        where: { id: documentoExistente.id },
+        data: {
+          status: 'PUBLICADO',
+          vigente: true,
+          publicadoEm: new Date(),
+        },
+      });
+    } else {
+      await prisma.popDocumento.create({
+        data: {
+          perfil,
+          titulo: `POP inicial - ${perfil}`,
+          versao: '1.0',
+          conteudoMarkdown,
+          status: 'PUBLICADO',
+          vigente: true,
+          publicadoEm: new Date(),
+        },
+      });
+    }
+  }
+}
+
 async function main(): Promise<void> {
   console.info('Iniciando seed...');
   await semearUsuarios();
@@ -117,6 +196,8 @@ async function main(): Promise<void> {
   console.info('Itens do checklist 5S semeados.');
   await semearCursos();
   console.info('Cursos e trilhas obrigatorios semeados.');
+  await semearPopInicial();
+  console.info('POP inicial semeado.');
   console.info('Seed concluido.');
 }
 

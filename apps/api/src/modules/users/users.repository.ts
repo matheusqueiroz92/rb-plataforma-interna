@@ -1,4 +1,4 @@
-import type { Perfil, StatusUsuario, Usuario } from '@prisma/client';
+import type { Perfil, Prisma, StatusUsuario, Usuario } from '@prisma/client';
 import { prisma } from '../../shared/prisma/prisma.js';
 
 export const camposPublicosUsuario = {
@@ -20,7 +20,11 @@ export const camposPublicosUsuario = {
   atualizadoEm: true,
 } as const;
 
-export type UsuarioPublico = Pick<Usuario, keyof typeof camposPublicosUsuario>;
+type UsuarioPublicoDB = Prisma.UsuarioGetPayload<{ select: typeof camposPublicosUsuario }>;
+
+export type UsuarioPublico = Omit<UsuarioPublicoDB, 'popsAceitos'> & {
+  aceitePopPerfil: Perfil | null;
+};
 
 export interface FiltroUsuarios {
   perfil?: Perfil;
@@ -49,8 +53,15 @@ export interface IUsersRepository {
 }
 
 export class PrismaUsersRepository implements IUsersRepository {
+  private normalizar(u: UsuarioPublicoDB): UsuarioPublico {
+    return {
+      ...u,
+      aceitePopPerfil: null,
+    };
+  }
+
   async listar(filtro: FiltroUsuarios): Promise<UsuarioPublico[]> {
-    return prisma.usuario.findMany({
+    const dados = await prisma.usuario.findMany({
       where: {
         perfil: filtro.perfil,
         status: filtro.status,
@@ -67,10 +78,12 @@ export class PrismaUsersRepository implements IUsersRepository {
       select: camposPublicosUsuario,
       orderBy: [{ perfil: 'asc' }, { nome: 'asc' }],
     });
+    return dados.map((d) => this.normalizar(d));
   }
 
   async buscarPorId(id: string): Promise<UsuarioPublico | null> {
-    return prisma.usuario.findUnique({ where: { id }, select: camposPublicosUsuario });
+    const dado = await prisma.usuario.findUnique({ where: { id }, select: camposPublicosUsuario });
+    return dado ? this.normalizar(dado) : null;
   }
 
   async buscarExistente(email: string, matricula: string) {
@@ -81,14 +94,15 @@ export class PrismaUsersRepository implements IUsersRepository {
   }
 
   async criar(dados: Parameters<IUsersRepository['criar']>[0]): Promise<UsuarioPublico> {
-    return prisma.usuario.create({
+    const criado = await prisma.usuario.create({
       data: { ...dados, email: dados.email.toLowerCase() },
       select: camposPublicosUsuario,
     });
+    return this.normalizar(criado);
   }
 
   async atualizar(id: string, dados: Partial<Usuario>): Promise<UsuarioPublico> {
-    return prisma.usuario.update({
+    const atualizado = await prisma.usuario.update({
       where: { id },
       data: {
         nome: dados.nome,
@@ -104,14 +118,16 @@ export class PrismaUsersRepository implements IUsersRepository {
       },
       select: camposPublicosUsuario,
     });
+    return this.normalizar(atualizado);
   }
 
   async inativar(id: string): Promise<UsuarioPublico> {
-    return prisma.usuario.update({
+    const inativado = await prisma.usuario.update({
       where: { id },
       data: { status: 'INATIVO', dataDesligamento: new Date() },
       select: camposPublicosUsuario,
     });
+    return this.normalizar(inativado);
   }
 
   async resetarSenha(id: string, senhaHash: string): Promise<void> {

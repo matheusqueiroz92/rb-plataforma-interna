@@ -16,3 +16,8 @@ export const trocarSenhaSchema = z.object({
   novaSenha: z.string().min(8),
 });
 export type TrocarSenhaInput = z.infer<typeof trocarSenhaSchema>;
+
+export const aceitarPopSchema = z.object({
+  popId: z.string().uuid('POP invalido'),
+});
+export type AceitarPopInput = z.infer<typeof aceitarPopSchema>;

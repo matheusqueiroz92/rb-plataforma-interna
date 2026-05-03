@@ -1,9 +1,8 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import type { LoginInput, RefreshInput, TrocarSenhaInput } from '@rb/validators';
+import type { AceitarPopInput, LoginInput, RefreshInput, TrocarSenhaInput } from '@rb/validators';
 import { ACAO_AUDITORIA } from '@rb/constants';
 
-import { env } from '../../config/env.js';
-import { extrairIp } from '../../shared/ip/ip.js';
+import { extrairIp, extrairUserAgent } from '../../shared/ip/ip.js';
 import type { AuthService } from './auth.service.js';
 
 export class AuthController {
@@ -14,7 +13,7 @@ export class AuthController {
     reply: FastifyReply,
   ): Promise<void> => {
     try {
-      const resposta = await this.service.autenticar(req.body, env.POP_EST_VERSAO_ATUAL);
+      const resposta = await this.service.autenticar(req.body);
       await req.server.registrarAuditoria({
         req,
         usuarioId: resposta.usuario.id,
@@ -71,16 +70,19 @@ export class AuthController {
     reply.send({ sucesso: true });
   };
 
-  aceitarPop = async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+  aceitarPop = async (
+    req: FastifyRequest<{ Body: AceitarPopInput }>,
+    reply: FastifyReply,
+  ): Promise<void> => {
     if (!req.user) throw req.server.httpErrors.unauthorized();
-    await this.service.aceitarPop(req.user.id, env.POP_EST_VERSAO_ATUAL, extrairIp(req));
+    await this.service.aceitarPop(req.user.id, req.body, extrairIp(req), extrairUserAgent(req));
     await req.server.registrarAuditoria({
       req,
       acao: ACAO_AUDITORIA.ACEITAR_POP,
       entidade: 'Usuario',
       entidadeId: req.user.id,
-      dadosNovos: { versao: env.POP_EST_VERSAO_ATUAL },
+      dadosNovos: { popId: req.body.popId },
     });
-    reply.send({ sucesso: true, versao: env.POP_EST_VERSAO_ATUAL });
+    reply.send({ sucesso: true, popId: req.body.popId });
   };
 }

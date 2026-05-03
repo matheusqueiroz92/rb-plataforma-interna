@@ -7,3 +7,4 @@ export * from './demandas.schema.js';
 export * from './ia.schema.js';
 export * from './notificacoes.schema.js';
 export * from './cursos.schema.js';
+export * from './pop.schema.js';

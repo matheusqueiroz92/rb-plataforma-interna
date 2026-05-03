@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import type { LoginInput, TrocarSenhaInput } from '@rb/validators';
+import type { AceitarPopInput, LoginInput, TrocarSenhaInput } from '@rb/validators';
 import { SENHA_HISTORICO_BLOQUEADO } from '@rb/constants';
 import { validarForcaSenha } from '@rb/utils';
 
@@ -18,6 +18,7 @@ export interface RespostaLogin {
     matricula: string;
     perfil: string;
     aceitePopVersao: string | null;
+    aceitePopPerfil: string | null;
     precisaAceitarPop: boolean;
   };
 }
@@ -28,7 +29,7 @@ export class AuthService {
     private readonly app: FastifyInstance,
   ) {}
 
-  async autenticar(input: LoginInput, versaoPopAtual: string): Promise<RespostaLogin> {
+  async autenticar(input: LoginInput): Promise<RespostaLogin> {
     const usuario = await this.repo.buscarPorEmail(input.email);
     if (!usuario) throw new ErroAutenticacao('Credenciais invalidas');
     if (usuario.status !== 'ATIVO') {
@@ -37,6 +38,12 @@ export class AuthService {
 
     const senhaOk = await conferirSenha(input.senha, usuario.senhaHash);
     if (!senhaOk) throw new ErroAutenticacao('Credenciais invalidas');
+
+    const popVigente = await this.repo.buscarPopVigentePorPerfil(usuario.perfil);
+    const ultimoAceite = popVigente
+      ? await this.repo.buscarUltimoAceite(usuario.id, usuario.perfil)
+      : null;
+    const precisaAceitarPop = popVigente ? ultimoAceite?.versao !== popVigente.versao : false;
 
     const payload = { sub: usuario.id, perfil: usuario.perfil, matricula: usuario.matricula };
     const accessToken = this.app.jwt.sign(payload);
@@ -52,7 +59,8 @@ export class AuthService {
         matricula: usuario.matricula,
         perfil: usuario.perfil,
         aceitePopVersao: usuario.aceitePopVersao,
-        precisaAceitarPop: usuario.aceitePopVersao !== versaoPopAtual,
+        aceitePopPerfil: ultimoAceite?.perfil ?? null,
+        precisaAceitarPop,
       },
     };
   }
@@ -102,7 +110,22 @@ export class AuthService {
     await this.repo.atualizarSenha(usuarioId, novoHash, novoHistorico);
   }
 
-  async aceitarPop(usuarioId: string, versao: string, ip: string): Promise<void> {
-    await this.repo.registrarAceitePop(usuarioId, versao, ip);
+  async aceitarPop(usuarioId: string, input: AceitarPopInput, ip: string, userAgent?: string): Promise<void> {
+    const usuario = await this.repo.buscarPorId(usuarioId);
+    if (!usuario) throw new ErroAutenticacao();
+
+    const popVigente = await this.repo.buscarPopVigentePorPerfil(usuario.perfil);
+    if (!popVigente || popVigente.id !== input.popId) {
+      throw new ErroValidacao('POP informado nao corresponde ao vigente para seu perfil.');
+    }
+
+    await this.repo.registrarAceitePop({
+      usuarioId,
+      popDocumentoId: popVigente.id,
+      perfil: popVigente.perfil,
+      versao: popVigente.versao,
+      ip,
+      userAgent,
+    });
   }
 }

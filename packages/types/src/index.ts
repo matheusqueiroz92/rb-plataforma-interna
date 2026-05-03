@@ -11,6 +11,7 @@ import type {
   CategoriaChecklist,
   PerfilChecklist,
   TipoCertificado,
+  StatusPopDocumento,
 } from '@rb/constants';
 
 // ============================================================================
@@ -50,6 +51,7 @@ export interface UsuarioPublico {
   telefoneWhatsapp: string | null;
   aceitePopEm: string | null;
   aceitePopVersao: string | null;
+  aceitePopPerfil: Perfil | null;
   criadoEm: string;
   atualizadoEm: string;
 }
@@ -64,7 +66,22 @@ export interface UsuarioSessao {
   matricula: string;
   perfil: Perfil;
   aceitePopVersao: string | null;
+  aceitePopPerfil: Perfil | null;
   precisaAceitarPop: boolean;
+}
+
+export interface PopDocumentoDTO {
+  id: string;
+  perfil: Perfil;
+  titulo: string;
+  conteudoMarkdown: string;
+  versao: string;
+  status: StatusPopDocumento;
+  vigente: boolean;
+  aprovadoEm: string | null;
+  publicadoEm: string | null;
+  criadoEm: string;
+  atualizadoEm: string;
 }
 
 export interface RespostaLogin {

@@ -10,14 +10,18 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import type { Perfil } from '@rb/constants';
 
 import { apiClient, ApiError } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
 import { cores, espacamentos, raios, tipografia } from '@/lib/theme';
 
 interface RespostaPop {
+  id: string;
+  perfil: string;
+  titulo: string;
   versao: string;
-  texto: string;
+  conteudoMarkdown: string;
 }
 
 export default function TelaAceitePop() {
@@ -32,7 +36,7 @@ export default function TelaAceitePop() {
   useEffect(() => {
     (async () => {
       try {
-        const dado = await apiClient.get<RespostaPop>('/pop/texto', token);
+        const dado = await apiClient.get<RespostaPop>('/pop/vigente/atual', token);
         setPop(dado);
       } catch (e) {
         setErro(e instanceof ApiError ? e.mensagem : 'Falha ao carregar POP.');
@@ -41,11 +45,16 @@ export default function TelaAceitePop() {
   }, [token]);
 
   async function confirmar(): Promise<void> {
+    if (!pop?.id) return;
     setEnviando(true);
     setErro(null);
     try {
-      const resp = await apiClient.post<{ versao: string }>('/auth/aceitar-pop', {}, token);
-      atualizarUsuario({ aceitePopVersao: resp.versao, precisaAceitarPop: false });
+      await apiClient.post('/auth/aceitar-pop', { popId: pop.id }, token);
+      atualizarUsuario({
+        aceitePopVersao: pop.versao,
+        aceitePopPerfil: pop.perfil as Perfil,
+        precisaAceitarPop: false,
+      });
       router.replace('/(tabs)/inicio');
     } catch (e) {
       setErro(e instanceof ApiError ? e.mensagem : 'Falha ao registrar aceite.');
@@ -57,7 +66,7 @@ export default function TelaAceitePop() {
   return (
     <SafeAreaView style={estilos.tela}>
       <View style={estilos.cabecalho}>
-        <Text style={estilos.titulo}>POP-EST-001</Text>
+        <Text style={estilos.titulo}>{pop?.titulo ?? 'POP vigente'}</Text>
         <Text style={estilos.subtitulo}>
           Leia o texto integral e registre o aceite para liberar o acesso.
         </Text>
@@ -70,7 +79,7 @@ export default function TelaAceitePop() {
           </View>
         )}
         {pop ? (
-          <Text style={estilos.corpo}>{pop.texto}</Text>
+          <Text style={estilos.corpo}>{pop.conteudoMarkdown}</Text>
         ) : (
           <ActivityIndicator color={cores.gold[500]} />
         )}
@@ -85,7 +94,7 @@ export default function TelaAceitePop() {
             thumbColor={cores.branco}
           />
           <Text style={estilos.textoAceite}>
-            Declaro que li e aceito integralmente o POP-EST-001.
+            Declaro que li e aceito integralmente o POP vigente do meu perfil.
           </Text>
         </View>
 

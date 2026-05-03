@@ -3,13 +3,17 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ScrollText, CheckCircle2 } from 'lucide-react';
+import type { Perfil } from '@rb/constants';
 
 import { apiClient, ApiError } from '@/lib/api';
 import { useAuthStore } from '@/stores/auth-store';
 
 interface RespostaPop {
+  id: string;
+  perfil: string;
+  titulo: string;
   versao: string;
-  texto: string;
+  conteudoMarkdown: string;
 }
 
 export default function PaginaAceitePop() {
@@ -25,7 +29,7 @@ export default function PaginaAceitePop() {
   useEffect(() => {
     async function carregar(): Promise<void> {
       try {
-        const dado = await apiClient.get<RespostaPop>('/pop/texto', token);
+        const dado = await apiClient.get<RespostaPop>('/pop/vigente/atual', token);
         setPop(dado);
       } catch (e) {
         setErro(e instanceof ApiError ? e.mensagem : 'Nao foi possivel carregar o POP.');
@@ -35,15 +39,20 @@ export default function PaginaAceitePop() {
   }, [token]);
 
   async function aceitar(): Promise<void> {
+    if (!pop) return;
     setEnviando(true);
     setErro(null);
     try {
-      const resp = await apiClient.post<{ sucesso: boolean; versao: string }>(
+      await apiClient.post<{ sucesso: boolean; popId: string }>(
         '/auth/aceitar-pop',
-        {},
+        { popId: pop.id },
         token,
       );
-      atualizarUsuario({ aceitePopVersao: resp.versao, precisaAceitarPop: false });
+      atualizarUsuario({
+        aceitePopVersao: pop.versao,
+        aceitePopPerfil: pop.perfil as Perfil,
+        precisaAceitarPop: false,
+      });
       router.replace('/dashboard');
     } catch (e) {
       setErro(e instanceof ApiError ? e.mensagem : 'Falha ao registrar aceite.');
@@ -59,7 +68,7 @@ export default function PaginaAceitePop() {
           <ScrollText className="h-6 w-6 text-gold-500" /> Procedimento Operacional Padrao
         </h1>
         <p className="text-sm text-gray-500 mt-2 pl-4">
-          {usuario?.nome}, leia o texto integral do POP-EST-001{pop ? ` (versao ${pop.versao})` : ''}. O
+          {usuario?.nome}, leia o texto integral do POP{pop ? ` ${pop.titulo} (versao ${pop.versao})` : ''}. O
           aceite e obrigatorio para liberar o acesso a plataforma.
         </p>
       </section>
@@ -73,7 +82,7 @@ export default function PaginaAceitePop() {
       <article className="cartao-institucional p-8 max-h-[60vh] overflow-y-auto">
         {pop ? (
           <div className="whitespace-pre-wrap font-sans text-gray-900 leading-relaxed text-sm">
-            {pop.texto}
+            {pop.conteudoMarkdown}
           </div>
         ) : (
           <p className="text-gray-500">Carregando texto do POP...</p>
@@ -89,7 +98,7 @@ export default function PaginaAceitePop() {
             onChange={(e) => setAceiteConfirmado(e.target.checked)}
           />
           <span className="text-sm text-gray-900">
-            Declaro que li integralmente o POP-EST-001, compreendi suas disposicoes e me comprometo a
+            Declaro que li integralmente o POP selecionado para meu perfil, compreendi suas disposicoes e me comprometo a
             observar os deveres, direitos e condutas nele descritos, nos termos da Lei 11.788/2008, da
             Lei 13.709/2018 (LGPD) e do Estatuto da OAB.
           </span>

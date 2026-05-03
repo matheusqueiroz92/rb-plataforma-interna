@@ -29,7 +29,8 @@ function Protecao() {
       router.replace('/(auth)/login');
       return;
     }
-    if (temSessao && usuario?.precisaAceitarPop && segments[1] !== 'aceite-pop') {
+    const rotaFilha = segments.at(1);
+    if (temSessao && usuario?.precisaAceitarPop && rotaFilha !== 'aceite-pop') {
       router.replace('/(auth)/aceite-pop');
       return;
     }

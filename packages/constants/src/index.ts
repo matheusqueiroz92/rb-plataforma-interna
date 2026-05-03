@@ -16,6 +16,9 @@ export const HIERARQUIA_PERFIL: Record<Perfil, number> = {
 export const STATUS_USUARIO = ['ATIVO', 'INATIVO', 'FERIAS', 'AFASTADO'] as const;
 export type StatusUsuario = (typeof STATUS_USUARIO)[number];
 
+export const STATUS_POP_DOCUMENTO = ['RASCUNHO', 'APROVADO', 'PUBLICADO'] as const;
+export type StatusPopDocumento = (typeof STATUS_POP_DOCUMENTO)[number];
+
 // ============================================================================
 // Ponto digital
 // ============================================================================
@@ -154,6 +157,10 @@ export const ACAO_AUDITORIA = {
   REMOVER_USUARIO: 'REMOVER_USUARIO',
   REDEFINIR_SENHA: 'REDEFINIR_SENHA',
   ACEITAR_POP: 'ACEITAR_POP',
+  CRIAR_POP: 'CRIAR_POP',
+  EDITAR_POP: 'EDITAR_POP',
+  APROVAR_POP: 'APROVAR_POP',
+  PUBLICAR_POP: 'PUBLICAR_POP',
   REGISTRAR_PONTO: 'REGISTRAR_PONTO',
   EDITAR_PONTO: 'EDITAR_PONTO',
   ENVIAR_RELATORIO: 'ENVIAR_RELATORIO',

@@ -1,31 +1,46 @@
 import type { FastifyInstance } from 'fastify';
-import fs from 'node:fs/promises';
-import path from 'node:path';
+import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { criarPopSchema, atualizarPopSchema, filtroPopSchema } from '@rb/validators';
 
-import { env } from '../../config/env.js';
-import { ErroNaoEncontrado } from '../../shared/errors/app-error.js';
+import { PopController } from './pop.controller.js';
+import { PopService } from './pop.service.js';
+import { PrismaPopRepository } from './pop.repository.js';
 
 export async function popRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/versao-atual', { onRequest: [app.autenticar] }, async () => ({
-    versao: env.POP_EST_VERSAO_ATUAL,
-  }));
+  const repo = new PrismaPopRepository();
+  const service = new PopService(repo);
+  const controller = new PopController(service);
+  const route = app.withTypeProvider<ZodTypeProvider>();
 
-  app.get('/texto', { onRequest: [app.autenticar] }, async () => {
-    const candidatos = [
-      path.resolve(process.cwd(), 'docs', 'POP-EST-001.md'),
-      path.resolve(process.cwd(), '..', '..', 'docs', 'POP-EST-001.md'),
-      path.resolve(process.cwd(), '..', 'docs', 'POP-EST-001.md'),
-    ];
-
-    for (const caminho of candidatos) {
-      try {
-        const texto = await fs.readFile(caminho, 'utf-8');
-        return { versao: env.POP_EST_VERSAO_ATUAL, texto };
-      } catch {
-        // tenta proximo candidato
-      }
-    }
-
-    throw new ErroNaoEncontrado('Texto do POP-EST-001');
+  route.get('/', {
+    onRequest: [app.autenticar, app.exigirNivelMinimo('GESTORA')],
+    schema: { querystring: filtroPopSchema },
+    handler: controller.listar,
+  });
+  route.get('/vigente/atual', {
+    onRequest: [app.autenticar],
+    handler: controller.vigentePorPerfil,
+  });
+  route.get('/:id', {
+    onRequest: [app.autenticar, app.exigirNivelMinimo('GESTORA')],
+    handler: controller.obter,
+  });
+  route.post('/', {
+    onRequest: [app.autenticar, app.exigirNivelMinimo('GESTORA')],
+    schema: { body: criarPopSchema },
+    handler: controller.criar,
+  });
+  route.put('/:id', {
+    onRequest: [app.autenticar, app.exigirNivelMinimo('GESTORA')],
+    schema: { body: atualizarPopSchema },
+    handler: controller.atualizar,
+  });
+  route.post('/:id/aprovar', {
+    onRequest: [app.autenticar, app.exigirNivelMinimo('GESTORA')],
+    handler: controller.aprovar,
+  });
+  route.post('/:id/publicar', {
+    onRequest: [app.autenticar, app.exigirNivelMinimo('GESTORA')],
+    handler: controller.publicar,
   });
 }

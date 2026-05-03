@@ -9,6 +9,7 @@ import { HIERARQUIA_PERFIL, type Perfil } from '@rb/constants';
 
 import { useAuthStore } from '@/stores/auth-store';
 import { cn } from '@/lib/utils';
+import { apiClient } from '@/lib/api';
 
 interface LinkNav {
   href: string;
@@ -18,6 +19,9 @@ interface LinkNav {
 
 const links: LinkNav[] = [
   { href: '/dashboard', texto: 'Painel' },
+  { href: '/equipe', texto: 'Equipe', nivelMinimo: 'GESTORA' },
+  { href: '/pop', texto: 'POPs', nivelMinimo: 'GESTORA' },
+  { href: '/resumo-equipe', texto: 'Resumo', nivelMinimo: 'ASSESSORA_JR' },
   { href: '/ponto', texto: 'Ponto' },
   { href: '/checklist', texto: 'Checklist' },
   { href: '/demandas', texto: 'Demandas' },
@@ -28,6 +32,7 @@ const links: LinkNav[] = [
   { href: '/cursos', texto: 'Cursos' },
   { href: '/espelho-ponto', texto: 'Espelho' },
   { href: '/notificacoes', texto: 'Notif.' },
+  { href: '/conta', texto: 'Conta' },
   { href: '/auditoria', texto: 'Auditoria', nivelMinimo: 'GESTORA' },
 ];
 
@@ -36,9 +41,17 @@ export function Cabecalho() {
   const pathname = usePathname();
   const [menuAberto, setMenuAberto] = useState(false);
   const usuario = useAuthStore((s) => s.usuario);
+  const accessToken = useAuthStore((s) => s.accessToken);
   const limpar = useAuthStore((s) => s.limpar);
 
-  function sair(): void {
+  async function sair(): Promise<void> {
+    if (accessToken) {
+      try {
+        await apiClient.post('/auth/logout', {}, accessToken);
+      } catch {
+        // limpeza local segue mesmo em falha de rede
+      }
+    }
     limpar();
     router.replace('/');
   }
@@ -95,7 +108,7 @@ export function Cabecalho() {
             <User2 className="h-5 w-5 text-gold-500" />
           </div>
           <button
-            onClick={sair}
+            onClick={() => void sair()}
             className="p-2 rounded-md hover:bg-navy-700 transition-colors"
             title="Sair"
             aria-label="Sair"

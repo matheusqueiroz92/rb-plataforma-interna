@@ -118,6 +118,12 @@ enum PapelChat {
   ASSISTANT
 }
 
+enum StatusPopDocumento {
+  RASCUNHO
+  APROVADO
+  PUBLICADO
+}
+
 // ============================================================================
 // USUARIOS
 // ============================================================================
@@ -161,6 +167,10 @@ model Usuario {
   notificacoesWhatsapp  NotificacaoWhatsapp[]
   chatMensagens         ChatIAMensagem[]
   conclusoesCursos      ConclusaoCurso[]
+  popsCriados           PopDocumento[]          @relation("PopCriador")
+  popsAprovados         PopDocumento[]          @relation("PopAprovador")
+  popsPublicados        PopDocumento[]          @relation("PopPublicador")
+  popsAceitos           PopAceite[]
 
   @@index([perfil, status])
   @@index([email])
@@ -454,4 +464,49 @@ model ConclusaoCurso {
 
   @@unique([usuarioId, cursoId])
   @@map("conclusoes_cursos")
+}
+
+model PopDocumento {
+  id              String             @id @default(uuid()) @db.Uuid
+  perfil          Perfil
+  titulo          String             @db.VarChar(200)
+  conteudoMarkdown String            @map("conteudo_markdown")
+  versao          String             @db.VarChar(20)
+  status          StatusPopDocumento @default(RASCUNHO)
+  vigente         Boolean            @default(false)
+  criadoPorId     String?            @map("criado_por") @db.Uuid
+  aprovadoPorId   String?            @map("aprovado_por") @db.Uuid
+  aprovadoEm      DateTime?          @map("aprovado_em") @db.Timestamptz()
+  publicadoPorId  String?            @map("publicado_por") @db.Uuid
+  publicadoEm     DateTime?          @map("publicado_em") @db.Timestamptz()
+  criadoEm        DateTime           @default(now()) @map("criado_em") @db.Timestamptz()
+  atualizadoEm    DateTime           @updatedAt @map("atualizado_em") @db.Timestamptz()
+
+  criador      Usuario?    @relation("PopCriador", fields: [criadoPorId], references: [id], onDelete: SetNull)
+  aprovador    Usuario?    @relation("PopAprovador", fields: [aprovadoPorId], references: [id], onDelete: SetNull)
+  publicador   Usuario?    @relation("PopPublicador", fields: [publicadoPorId], references: [id], onDelete: SetNull)
+  aceites      PopAceite[]
+
+  @@index([perfil, status])
+  @@index([perfil, vigente])
+  @@unique([perfil, versao])
+  @@map("pops_documentos")
+}
+
+model PopAceite {
+  id             String   @id @default(uuid()) @db.Uuid
+  usuarioId       String   @map("usuario_id") @db.Uuid
+  popDocumentoId  String   @map("pop_documento_id") @db.Uuid
+  perfil         Perfil
+  versao         String   @db.VarChar(20)
+  ip             String?  @db.VarChar(64)
+  userAgent      String?  @map("user_agent")
+  aceitoEm       DateTime @default(now()) @map("aceito_em") @db.Timestamptz()
+
+  usuario      Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  popDocumento PopDocumento @relation(fields: [popDocumentoId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, perfil, aceitoEm])
+  @@index([popDocumentoId])
+  @@map("pops_aceites")
 }

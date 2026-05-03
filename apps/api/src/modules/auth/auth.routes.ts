@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
-import { loginSchema, refreshSchema, trocarSenhaSchema } from '@rb/validators';
+import { aceitarPopSchema, loginSchema, refreshSchema, trocarSenhaSchema } from '@rb/validators';
 
 import { env } from '../../config/env.js';
 import { AuthController } from './auth.controller.js';
@@ -42,6 +42,7 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
   });
 
   route.post('/aceitar-pop', {
+    schema: { body: aceitarPopSchema },
     onRequest: [app.autenticar],
     handler: controller.aceitarPop,
   });
